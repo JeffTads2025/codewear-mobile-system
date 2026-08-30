@@ -1,21 +1,27 @@
 export interface Product {
-  id: string;
-  name: string;
-  price: number;
-  stock: number;
-  description: string;
-  image: string;
-  sizes: string[];
+  id: string | number;
+  name?: string;
+  nome?: string;
+  price?: number;
+  preco?: number;
+  stock?: number;
+  estoque?: number;
+  description?: string;
+  descricao?: string;
+  image?: string;
+  image_url?: string;
+  imagemUrl?: string;
+  sizes?: string[] | { id: number; size: string; stock: number }[];
+  promotions?: {
+    id: number;
+    code: string;
+    discountPercentage: number;
+    validUntil?: string;
+    isActive: boolean;
+    productId?: number | null;
+  }[];
+  colors?: { id: number; productId: number; name: string }[];
 }
-
-const createSvg = (title1: string, title2: string = '', titleColor: string = '#FFFFFF') => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
-    <rect width="300" height="300" fill="#1E1E1E"/>
-    <text x="50%" y="${title2 ? '42%' : '52%'}" fill="${titleColor}" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle">${title1}</text>
-    ${title2 ? `<text x="50%" y="58%" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle">${title2}</text>` : ''}
-  </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-};
 
 export const PRODUCTS: Product[] = [
   {
@@ -24,7 +30,7 @@ export const PRODUCTS: Product[] = [
     price: 10.00,
     stock: 1,
     description: 'Tamanho único - Unissex. Algodão 100% penteado super macio.',
-    image: createSvg("I'M NOT A", 'HACKER.', '#FFCC00'),
+    image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500',
     sizes: ['P', 'M', 'G', 'GG'],
   },
   {
@@ -33,7 +39,7 @@ export const PRODUCTS: Product[] = [
     price: 78.90,
     stock: 0,
     description: 'Tamanho único - Unissex. Modelagem street para devs exigentes.',
-    image: createSvg('SELECT * FROM', 'other_people', '#FFCC00'),
+    image: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=500',
     sizes: ['P', 'M', 'G', 'GG'],
   },
   {
@@ -42,7 +48,7 @@ export const PRODUCTS: Product[] = [
     price: 98.60,
     stock: 2,
     description: 'Tamanho único - Unissex. Estampa com silk-screen de alta durabilidade.',
-    image: createSvg('dia de UPDATE', 'sem WHERE', '#00E676'),
+    image: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=500',
     sizes: ['P', 'M', 'G', 'GG'],
   },
   {
@@ -51,7 +57,7 @@ export const PRODUCTS: Product[] = [
     price: 89.50,
     stock: 3,
     description: 'Tamanho único - Unissex. Para quem curte código limpo e moderno.',
-    image: createSvg('🐍 PYTHON', 'CODE', '#3776AB'),
+    image: 'https://images.unsplash.com/photo-1562157873-818bc0726f68?w=500',
     sizes: ['P', 'M', 'G', 'GG'],
   },
   {
@@ -60,7 +66,7 @@ export const PRODUCTS: Product[] = [
     price: 78.98,
     stock: 3,
     description: 'Tamanho único - Unissex. Ideal para o dia a dia e eventos de tecnologia.',
-    image: createSvg('JS', 'Developer', '#F7DF1E'),
+    image: 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=500',
     sizes: ['P', 'M', 'G', 'GG'],
   },
   {
@@ -69,7 +75,7 @@ export const PRODUCTS: Product[] = [
     price: 84.90,
     stock: 5,
     description: 'Tamanho único - Unissex. Escolha sua arma de desenvolvimento.',
-    image: createSvg('C++', 'WEAPON', '#00599C'),
+    image: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=500',
     sizes: ['P', 'M', 'G', 'GG'],
   },
 ];

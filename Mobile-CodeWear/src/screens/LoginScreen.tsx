@@ -1,17 +1,55 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../routes';
+
+import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import Toast from 'react-native-toast-message';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const navigation = useNavigation<NavigationProp>();
+  const { signIn } = useAuth();
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Toast.show({ type: 'info', text1: 'Atenção', text2: 'Por favor, preencha o e-mail e a senha.' });
+      return;
+    }
+
+    try {
+      // Ajustado para 'login/' (com barra final para evitar redirect 301 no Nginx/Docker)
+      const response = await api.post('login/', { email, password });
+      await signIn(response.data.token);
+      
+      const user = response.data.user || response.data; 
+
+      if (user.isAdmin || user.role === 'admin') {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'AdminApp' }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro no login:', error);
+      const message = error.response?.data?.message || 'Não foi possível conectar ao servidor.';
+      Toast.show({ type: 'error', text1: 'Erro ao entrar', text2: message });
+    }
+  };
 
   return (
+    <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.card}>
         <Text style={styles.title}>Login</Text>
@@ -31,17 +69,27 @@ export function LoginScreen() {
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>🔒 Senha</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Digite sua senha"
-            placeholderTextColor="#666"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.passwordInputContainer}>
+            <TextInput
+              style={styles.inputPassword}
+              placeholder="Digite sua senha"
+              placeholderTextColor="#666"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.togglePasswordBtn}
+            >
+              <Text style={styles.togglePasswordIcon}>
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <TouchableOpacity style={styles.btnPrimary} onPress={() => navigation.navigate('Home')}>
+        <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin}>
           <Text style={styles.btnPrimaryText}>Entrar</Text>
         </TouchableOpacity>
 
@@ -50,6 +98,7 @@ export function LoginScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -61,6 +110,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  keyboard: { flex: 1 },
   card: {
     backgroundColor: '#161616',
     width: '100%',
@@ -95,6 +145,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: '#FFF',
     fontSize: 14,
+  },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F0F0F',
+    borderWidth: 1,
+    borderColor: '#262626',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+  },
+  inputPassword: {
+    flex: 1,
+    paddingVertical: 12,
+    color: '#FFF',
+    fontSize: 14,
+  },
+  togglePasswordBtn: {
+    padding: 8,
+  },
+  togglePasswordIcon: {
+    fontSize: 16,
   },
   btnPrimary: {
     backgroundColor: '#FFCC00',

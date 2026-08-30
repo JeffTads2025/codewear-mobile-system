@@ -45,7 +45,7 @@ export function CartProvider({ children }: CartProviderProps) {
   const removeFromCart = (productId: string, size: string) => {
     setCartItems((prev) =>
       prev.filter(
-        (item) => !(item.product.id === productId && item.size === size)
+        (item) => !(String(item.product.id) === String(productId) && item.size === size)
       )
     );
   };
@@ -54,7 +54,7 @@ export function CartProvider({ children }: CartProviderProps) {
     setCartItems((prev) =>
       prev
         .map((item) => {
-          if (item.product.id === productId && item.size === size) {
+          if (String(item.product.id) === String(productId) && item.size === size) {
             const newQuantity = item.quantity + delta;
             return newQuantity > 0 ? { ...item, quantity: newQuantity } : null;
           }
@@ -69,7 +69,7 @@ export function CartProvider({ children }: CartProviderProps) {
   };
 
   const totalCartValue = cartItems.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
+    (sum, item) => sum + Number(item.product.price ?? item.product.preco ?? 0) * item.quantity,
     0
   );
 

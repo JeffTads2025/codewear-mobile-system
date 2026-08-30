@@ -10,9 +10,9 @@ import {
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Product } from '../data/products';
 import { RootStackParamList } from '../routes';
 import { useCart } from '../context/CartContext';
+import { sortSizes } from '../utils/sizes';
 
 type ProductDetailRouteProp = RouteProp<RootStackParamList, 'ProductDetail'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProductDetail'>;
@@ -24,14 +24,28 @@ export function ProductDetailScreen() {
 
   const { product } = route.params;
 
-  const [selectedSize, setSelectedSize] = useState<string>('M');
+  // Resolução segura de propriedades sem type casting ('any')
+  const productName = product.name ?? product.nome ?? 'Produto';
+  const imageUrl = product.image_url ?? product.image ?? product.imagemUrl ?? 'https://via.placeholder.com/300';
+  const productPrice = Number(product.price ?? product.preco ?? 0);
+  const productStock = product.stock ?? product.estoque ?? 0;
+  const productDescription = product.description ?? product.descricao ?? 'Sem descrição cadastrada.';
+
+  // Tratamento dos tamanhos
+  const rawSizes = product.sizes;
+  const availableSizes: string[] = Array.isArray(rawSizes)
+    ? rawSizes.map((s) => (typeof s === 'string' ? s : s.size))
+    : ['P', 'M', 'G', 'GG'];
+  const orderedSizes = sortSizes(availableSizes);
+
+  const [selectedSize, setSelectedSize] = useState<string>(orderedSizes[0] || 'M');
   const [quantity, setQuantity] = useState<number>(1);
 
-  const isOutOfStock = product.stock === 0;
+  const isOutOfStock = productStock === 0;
 
   const handleQuantityChange = (delta: number) => {
     const next = quantity + delta;
-    if (next >= 1 && next <= product.stock) {
+    if (next >= 1 && next <= productStock) {
       setQuantity(next);
     }
   };
@@ -50,49 +64,53 @@ export function ProductDetailScreen() {
 
       {/* Imagem do Produto */}
       <View style={styles.imageContainer}>
-        <Image source={{ uri: product.image }} style={styles.image} resizeMode="cover" />
+        <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="cover" />
       </View>
 
       {/* Detalhes do Produto */}
       <View style={styles.detailsContainer}>
-        <Text style={styles.title}>{product.name}</Text>
+        <Text style={styles.title}>{productName}</Text>
 
         <View style={styles.stockBadge}>
           {isOutOfStock ? (
             <Text style={styles.outOfStock}>❌ Esgotado</Text>
           ) : (
-            <Text style={styles.inStock}>✅ Em Estoque: {product.stock} un</Text>
+            <Text style={styles.inStock}>✅ Em Estoque: {productStock} un</Text>
           )}
         </View>
 
-        <Text style={styles.price}>R$ {product.price.toFixed(2).replace('.', ',')}</Text>
+        <Text style={styles.price} numberOfLines={1}>R$ {productPrice.toFixed(2).replace('.', ',')}</Text>
 
         <Text style={styles.sectionLabel}>Descrição</Text>
-        <Text style={styles.description}>{product.description}</Text>
+        <Text style={styles.description}>{productDescription}</Text>
 
         {/* Seleção de Tamanho */}
-        <Text style={styles.sectionLabel}>Tamanho</Text>
-        <View style={styles.sizeContainer}>
-          {product.sizes.map((size) => (
-            <TouchableOpacity
-              key={size}
-              style={[
-                styles.sizeButton,
-                selectedSize === size && styles.sizeButtonActive,
-              ]}
-              onPress={() => setSelectedSize(size)}
-            >
-              <Text
-                style={[
-                  styles.sizeText,
-                  selectedSize === size && styles.sizeTextActive,
-                ]}
-              >
-                {size}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {orderedSizes.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>Tamanho</Text>
+            <View style={styles.sizeContainer}>
+              {orderedSizes.map((size) => (
+                <TouchableOpacity
+                  key={size}
+                  style={[
+                    styles.sizeButton,
+                    selectedSize === size && styles.sizeButtonActive,
+                  ]}
+                  onPress={() => setSelectedSize(size)}
+                >
+                  <Text
+                    style={[
+                      styles.sizeText,
+                      selectedSize === size && styles.sizeTextActive,
+                    ]}
+                  >
+                    {size}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* Controle de Quantidade */}
         <Text style={styles.sectionLabel}>Quantidade</Text>

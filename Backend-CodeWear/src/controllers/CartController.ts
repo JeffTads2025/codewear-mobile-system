@@ -5,7 +5,7 @@ import { AuthRequest } from '../types';
 
 export const addToCart = async (req: AuthRequest, res: Response): Promise<Response> => {
     try {
-        const { productId, quantity = 1 } = req.body;
+        const { productId, quantity = 1, size } = req.body;
         const userId = req.user!.id;
 
         const product = await Product.findByPk(productId);
@@ -13,7 +13,7 @@ export const addToCart = async (req: AuthRequest, res: Response): Promise<Respon
             return res.status(404).json({ message: "Produto não encontrado" });
         }
 
-        let item = await Cart.findOne({ where: { userId, productId } });
+        let item = await Cart.findOne({ where: { userId, productId, size: size || null } });
 
         if (item) {
             if (product.stock < (item.quantity + quantity)) {
@@ -31,12 +31,13 @@ export const addToCart = async (req: AuthRequest, res: Response): Promise<Respon
             return res.status(400).json({ message: "Quantidade solicitada superior ao estoque disponível." });
         }
 
-        const newItem = await Cart.create({ userId, productId, quantity });
+        const newItem = await Cart.create({ userId, productId, quantity, size: size || null });
         return res.status(201).json(newItem);
 
     } catch (error) {
         console.error("Erro no Backend:", error);
-        return res.status(500).json({ message: "Erro interno ao salvar no banco" });
+        console.error("Erro ao salvar carrinho:", error);
+        return res.status(500).json({ message: "Erro interno ao salvar no banco", detail: error instanceof Error ? error.message : undefined });
     }
 };
 

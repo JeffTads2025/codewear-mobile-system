@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
-import { Product } from '../data/products';
+import { Product } from '../types'; // Importe a interface do seu arquivo de tipos
 import { theme } from '../styles/theme';
 
 interface ProductCardProps {
@@ -9,13 +9,15 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onPress }: ProductCardProps) {
+  // Suporta tanto image_url da API quanto image de dados locais
+  const imageUrl = product.image_url || 'https://via.placeholder.com/150';
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
-      <Image source={{ uri: product.image }} style={styles.image} />
+      <Image source={{ uri: imageUrl }} style={styles.image} />
       <View style={styles.info}>
-        <Text style={styles.category}>{product.category}</Text>
         <Text style={styles.name} numberOfLines={1}>{product.name}</Text>
-        <Text style={styles.price}>R$ {product.price.toFixed(2)}</Text>
+        <Text style={styles.price}>R$ {Number(product.price).toFixed(2)}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -40,11 +42,6 @@ const styles = StyleSheet.create({
   },
   info: {
     gap: 4,
-  },
-  category: {
-    fontSize: 10,
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
   },
   name: {
     fontSize: 14,

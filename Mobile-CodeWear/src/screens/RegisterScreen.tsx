@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../routes';
+import { api } from '../services/api';
+import Toast from 'react-native-toast-message';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Register'>;
 
@@ -17,7 +19,27 @@ export function RegisterScreen() {
 
   const navigation = useNavigation<NavigationProp>();
 
+  const handleRegister = async () => {
+    const digits = cpf.replace(/\D/g, '');
+    const validCpf = digits.length === 11 && !/^([0-9])\1+$/.test(digits) && [9, 10].every((position) => {
+      const sum = digits.slice(0, position).split('').reduce((total, digit, index) => total + Number(digit) * (position + 1 - index), 0);
+      return (sum * 10) % 11 % 10 === Number(digits[position]);
+    });
+    if (!name || !email.includes('@') || !cpf || !phone || !address || password.length < 8 || password !== confirmPassword || !validCpf) {
+      Toast.show({ type: 'error', text1: 'Cadastro inválido', text2: 'Confira nome, e-mail, CPF, senha e endereço.' });
+      return;
+    }
+    try {
+      await api.post('users', { name, email, cpf, phone, address, password });
+      Toast.show({ type: 'success', text1: 'Conta criada', text2: 'Agora faça login.' });
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    } catch (error: any) {
+      Toast.show({ type: 'error', text1: 'Erro no cadastro', text2: error.response?.data?.message || 'Não foi possível criar a conta.' });
+    }
+  };
+
   return (
+    <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <View style={styles.iconBox}>
@@ -111,7 +133,7 @@ export function RegisterScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.btnPrimary} onPress={() => navigation.navigate('Home')}>
+        <TouchableOpacity style={styles.btnPrimary} onPress={handleRegister}>
           <Text style={styles.btnPrimaryText}>Criar Conta</Text>
         </TouchableOpacity>
 
@@ -120,6 +142,7 @@ export function RegisterScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -131,6 +154,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  keyboard: { flex: 1 },
   header: {
     alignItems: 'center',
     marginBottom: 20,

@@ -174,6 +174,7 @@ export const loginUser = async (req: AuthRequest, res: Response) => {
                 role: user.role,
                 phone: user.phone,
                 address: user.address
+                ,avatarUrl: user.avatarUrl
             }
         });
     } catch (error) {

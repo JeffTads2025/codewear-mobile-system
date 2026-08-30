@@ -11,6 +11,7 @@ interface UserAttributes {
   role: 'admin' | 'client';
   phone: string;
   address: string;
+  avatarUrl?: string;
 }
 
 interface UserCreationAttributes extends Optional<UserAttributes, 'id'> { }
@@ -24,6 +25,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public role!: 'admin' | 'client';
   public phone!: string;
   public address!: string;
+  public avatarUrl?: string;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -60,6 +62,7 @@ User.init({
   },
   phone: { type: DataTypes.STRING, allowNull: false },
   address: { type: DataTypes.TEXT, allowNull: false }
+  ,avatarUrl: { type: DataTypes.STRING, allowNull: true }
 }, {
   sequelize,
   tableName: 'users',

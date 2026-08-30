@@ -6,6 +6,8 @@ import Order from '../models/OrderModel';
 import OrderItem from '../models/OrderItemModel';
 import User from '../models/UserModel';
 import AuditLog from '../models/AuditLogModel';
+import Promotion from '../models/PromotionModel';
+import ProductSize from '../models/ProductSizeModel';
 import sequelize from '../config/database';
 import { AuthRequest } from '../types';
 import { getActiveClientWhereClause } from '../utils/accountCancellation';
@@ -14,6 +16,7 @@ interface CheckoutOrderItem {
     productId: number;
     quantity: number;
     price: number;
+    size?: string;
 }
 
 function canManageOrder(order: Order, req: AuthRequest): boolean {
@@ -53,7 +56,7 @@ export const checkout = async (req: AuthRequest, res: Response) => {
     const t = await sequelize.transaction();
     try {
         const userId = req.user!.id;
-        const { paymentMethod, address } = req.body;
+        const { paymentMethod, address, couponCode } = req.body;
 
         const cartItems = await Cart.findAll({ where: { userId } });
         if (cartItems.length === 0) throw new Error("Carrinho vazio");
@@ -74,8 +77,21 @@ export const checkout = async (req: AuthRequest, res: Response) => {
             itemsToOrder.push({
                 productId: item.productId,
                 quantity: item.quantity,
-                price: product.price
+                price: product.price,
+                size: item.size
             });
+        }
+
+        let discountPercentage = 0;
+        if (couponCode) {
+            const promotion = await Promotion.findOne({
+                where: { code: String(couponCode).trim().toUpperCase(), isActive: true }
+            });
+            if (!promotion || (promotion.validUntil && new Date(promotion.validUntil) < new Date())) {
+                throw new Error('Cupom inválido ou expirado');
+            }
+            discountPercentage = Number(promotion.discountPercentage);
+            totalValue = totalValue * (1 - discountPercentage / 100);
         }
 
         const order = await Order.create({
@@ -91,8 +107,21 @@ export const checkout = async (req: AuthRequest, res: Response) => {
                 orderId: order.id,
                 productId: item.productId,
                 quantity: item.quantity,
-                priceAtPurchase: item.price
+                priceAtPurchase: item.price,
+                size: item.size || null
             }, { transaction: t });
+
+            if (item.size) {
+                const size = await ProductSize.findOne({
+                    where: { productId: item.productId, size: item.size },
+                    transaction: t,
+                    lock: t.LOCK.UPDATE
+                });
+                if (size) {
+                    if (size.stock < item.quantity) throw new Error(`Estoque insuficiente para tamanho ${item.size}`);
+                    await size.decrement('stock', { by: item.quantity, transaction: t });
+                }
+            }
 
             await Product.decrement('stock', {
                 by: item.quantity,
@@ -180,7 +209,7 @@ export const listAllOrdersAdmin = async (req: AuthRequest, res: Response) => {
 // 4. ADMIN: DASHBOARD 
 export const getAdminDashboard = async (req: AuthRequest, res: Response) => {
     try {
-        const { month, year } = req.query;
+        const { day, month, year } = req.query;
 
         // TOTAL
         const totalRevenue = await Order.sum('totalValue') || 0;
@@ -189,6 +218,11 @@ export const getAdminDashboard = async (req: AuthRequest, res: Response) => {
 
         // Cálculo específico do mês 
         let monthlyRevenue = 0;
+        let dailyRevenue = 0;
+        let yearlyRevenue = 0;
+        if (day && month && year) {
+            dailyRevenue = await Order.sum('totalValue', { where: { createdAt: { [Op.between]: [new Date(`${year}-${month}-${day} 00:00:00`), new Date(`${year}-${month}-${day} 23:59:59`)] } } }) || 0;
+        }
         if (month && year) {
             const startDate = new Date(Number(year), Number(month) - 1, 1, 0, 0, 0);
             const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59);
@@ -199,11 +233,16 @@ export const getAdminDashboard = async (req: AuthRequest, res: Response) => {
                 }
             }) || 0;
         }
+        if (year) {
+            yearlyRevenue = await Order.sum('totalValue', { where: { createdAt: { [Op.between]: [new Date(Number(year), 0, 1), new Date(Number(year), 11, 31, 23, 59, 59)] } } }) || 0;
+        }
 
         // Retorna tudo 
         return res.status(200).json({
             totalRevenue,
             monthlyRevenue, 
+            dailyRevenue,
+            yearlyRevenue,
             totalOrders,
             totalUsers
         });
