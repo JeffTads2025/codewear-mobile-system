@@ -6,18 +6,22 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
-  SafeAreaView,
   TextInput,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { MaterialTopTabNavigationProp } from '@react-navigation/material-top-tabs';
 import { useCart } from '../context/CartContext';
 import { api, validateCoupon } from '../services/api';
 import Toast from 'react-native-toast-message';
+import { ClientTabParamList } from '../routes/ClientTopTabs';
+
+type NavigationProp = MaterialTopTabNavigationProp<ClientTabParamList, 'Cart'>;
 
 export function CartScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
   const { cartItems, updateQuantity, removeFromCart, clearCart } = useCart();
 
   // Estados do Cupom de Desconto
@@ -104,9 +108,10 @@ export function CartScreen() {
       });
       Toast.show({ type: 'success', text1: 'Compra realizada', text2: 'Seu pedido foi criado com sucesso.' });
       clearCart();
-      navigation.navigate('Home' as never);
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Erro na compra', text2: error.response?.data?.message || 'Não foi possível finalizar a compra.' });
+      navigation.navigate('Home');
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Erro na compra', text2: requestError.response?.data?.message ?? 'Não foi possível finalizar a compra.' });
     } finally {
       setLoadingPurchase(false);
     }
@@ -114,7 +119,7 @@ export function CartScreen() {
 
   return (
     <SafeAreaView style={styles.outerContainer}>
-      <View style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Botão de Voltar */}
         <TouchableOpacity
           style={styles.backButton}
@@ -132,7 +137,7 @@ export function CartScreen() {
           </View>
         ) : (
           <>
-            <ScrollView style={styles.itemsList} showsVerticalScrollIndicator={false}>
+            <View style={styles.itemsList}>
               {cartItems.map((item) => {
                 const itemPrice = Number(item.product.price ?? item.product.preco ?? 0);
 
@@ -199,7 +204,7 @@ export function CartScreen() {
                   </View>
                 );
               })}
-            </ScrollView>
+            </View>
 
             {/* Rodapé / Cupom e Total */}
             <View style={styles.footer}>
@@ -300,7 +305,7 @@ export function CartScreen() {
             </View>
           </>
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -315,6 +320,8 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     maxWidth: 960,
+  },
+  content: {
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 20,
@@ -343,7 +350,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   itemsList: {
-    flex: 1,
+    width: '100%',
   },
   cartCard: {
     flexDirection: 'row',

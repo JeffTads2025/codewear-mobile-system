@@ -14,6 +14,16 @@ interface ProfileData {
   avatarUrl?: string;
 }
 
+type EditableProfileField = 'name' | 'email' | 'cpf' | 'phone' | 'address';
+
+const profileFieldLabels: Record<EditableProfileField, string> = {
+  name: 'Nome',
+  email: 'E-mail',
+  cpf: 'CPF',
+  phone: 'Telefone',
+  address: 'Endereço',
+};
+
 export function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileData>({ name: '', email: '', cpf: '', phone: '', address: '' });
   const [loading, setLoading] = useState(false);
@@ -24,7 +34,7 @@ export function ProfileScreen() {
     api.get('me').then(({ data }) => setProfile(data)).catch(() => Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível carregar seu perfil.' }));
   }, []);
 
-  const updateField = (field: string, value: string) => setProfile((current) => ({ ...current, [field]: value }));
+  const updateField = (field: EditableProfileField, value: string) => setProfile((current) => ({ ...current, [field]: value }));
   const chooseAvatar = async () => {
     const [cameraPermission, mediaLibraryPermission] = await Promise.all([
       ImagePicker.requestCameraPermissionsAsync(),
@@ -48,11 +58,13 @@ export function ProfileScreen() {
       setUploading(true);
       const asset = result.assets[0];
       const formData = new FormData();
-      formData.append('avatar', { uri: asset.uri, name: 'avatar.jpg', type: 'image/jpeg' } as any);
-      const { data } = await api.post('users/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const mimeType = asset.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
+      const avatarFile = { uri: asset.uri, name: asset.fileName ?? 'avatar.jpg', type: mimeType };
+      formData.append('avatar', avatarFile as unknown as Blob);
+      const { data } = await api.post<{ avatarUrl: string }>('users/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setProfile((current) => ({ ...current, avatarUrl: data.avatarUrl }));
       Toast.show({ type: 'success', text1: 'Foto atualizada' });
-    } catch (error: any) { Toast.show({ type: 'error', text1: 'Erro', text2: error.response?.data?.message || 'Não foi possível enviar a foto.' }); }
+    } catch (error: unknown) { const requestError = error as { response?: { data?: { message?: string } } }; Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível enviar a foto.' }); }
     finally { setUploading(false); }
   };
   const save = async () => {
@@ -60,8 +72,9 @@ export function ProfileScreen() {
       setLoading(true);
       await api.put('users/profile', { name: profile.name, phone: profile.phone, address: profile.address, cpf: profile.cpf });
       Toast.show({ type: 'success', text1: 'Perfil atualizado' });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Erro', text2: error.response?.data?.message || 'Não foi possível salvar.' });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível salvar.' });
     } finally { setLoading(false); }
   };
 
@@ -73,7 +86,7 @@ export function ProfileScreen() {
       <Text style={styles.avatarAction}>{uploading ? 'Enviando...' : 'Alterar foto'}</Text>
     </TouchableOpacity>
     {(['name', 'email', 'cpf', 'phone', 'address'] as const).map((field) => <View key={field}>
-      <Text style={styles.label}>{({ name: 'Nome', email: 'E-mail', cpf: 'CPF', phone: 'Telefone', address: 'Endereço' } as any)[field]}</Text>
+      <Text style={styles.label}>{profileFieldLabels[field]}</Text>
       <TextInput style={styles.input} value={profile[field] || ''} onChangeText={(value) => updateField(field, value)} editable={field !== 'email'} multiline={field === 'address'} />
     </View>)}
     <TouchableOpacity style={styles.button} onPress={save} disabled={loading}><Text style={styles.buttonText}>{loading ? 'Salvando...' : 'Salvar alterações'}</Text></TouchableOpacity>

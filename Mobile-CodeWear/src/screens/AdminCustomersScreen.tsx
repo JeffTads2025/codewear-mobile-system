@@ -2,14 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Modal, TouchableOpacity } from 'react-native';
 import { api } from '../services/api';
 
+interface Customer {
+  id: number;
+  name: string;
+  email: string;
+  cpf?: string;
+  phone?: string;
+  address?: string;
+  role?: string;
+}
+
 export function AdminCustomersScreen() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<Customer | null>(null);
 
   useEffect(() => {
-    api.get('admin/users?limit=50')
-      .then(({ data }) => setUsers(data.users || []))
+    api.get<{ users: Customer[] }>('admin/users?limit=50')
+      .then(({ data }) => setUsers(data.users ?? []))
       .catch((error) => console.error('Erro ao carregar clientes:', error))
       .finally(() => setLoading(false));
   }, []);
@@ -18,7 +28,7 @@ export function AdminCustomersScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Lista de Clientes Cadastrados</Text>
       {loading ? <ActivityIndicator color="#ffcc00" /> : (
-      <FlatList
+        <FlatList
           data={users}
           keyExtractor={(item) => String(item.id)}
           ListEmptyComponent={<Text style={styles.subtitle}>Nenhum cliente encontrado.</Text>}
@@ -41,12 +51,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d0d0d', padding: 16 },
   title: { fontSize: 20, color: '#fff', fontWeight: 'bold', marginBottom: 16 },
   subtitle: { color: '#888', marginTop: 8, fontSize: 12 },
-  row: { 
-    backgroundColor: '#161616', 
-    borderWidth: 1, 
-    borderColor: '#222', 
-    borderRadius: 8, 
-    paddingVertical: 14, 
+  row: {
+    backgroundColor: '#161616',
+    borderWidth: 1,
+    borderColor: '#222',
+    borderRadius: 8,
+    paddingVertical: 14,
     paddingHorizontal: 12,
     marginBottom: 8
   },

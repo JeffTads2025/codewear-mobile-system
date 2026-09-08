@@ -2,8 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CouponValidationResponse } from '../types';
 
-// Endereço do IP local da sua máquina na rede Wi-Fi
-export const apiBaseUrl = 'http://192.168.1.19:3000';
+
+export const apiBaseUrl = 'http://192.168.1.9:3000';
 
 export const getApiAssetUrl = (assetPath?: string | null): string | undefined => {
   if (!assetPath) return undefined;

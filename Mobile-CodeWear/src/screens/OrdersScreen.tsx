@@ -3,13 +3,38 @@ import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity,
 import { useNavigation } from '@react-navigation/native';
 import { api } from '../services/api';
 
+interface OrderedProduct {
+  name?: string;
+  image_url?: string;
+}
+
+interface OrderItem {
+  id: number;
+  productId: number;
+  quantity: number;
+  size?: string;
+  Product?: OrderedProduct;
+  product?: OrderedProduct;
+}
+
+interface CustomerOrder {
+  id: number;
+  createdAt: string;
+  status: string;
+  paymentMethod: string;
+  address: string;
+  totalValue: number;
+  OrderItems?: OrderItem[];
+  orderItems?: OrderItem[];
+}
+
 export function OrdersScreen() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation();
 
   useEffect(() => {
-    api.get('orders?limit=50').then(({ data }) => setOrders(data.orders || data)).catch(() => undefined).finally(() => setLoading(false));
+    api.get<{ orders: CustomerOrder[] } | CustomerOrder[]>('orders?limit=50').then(({ data }) => setOrders(Array.isArray(data) ? data : data.orders)).catch(() => undefined).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#ffcc00" /></View>;
@@ -20,7 +45,7 @@ export function OrdersScreen() {
     <Text style={styles.text}>Pagamento: {item.paymentMethod}</Text>
     <Text style={styles.text}>Entrega: {item.address}</Text>
     <Text style={styles.total} numberOfLines={1}>R$ {Number(item.totalValue || 0).toFixed(2).replace('.', ',')}</Text>
-    {(item.OrderItems || item.orderItems || []).map((orderItem: any) => <View key={orderItem.id} style={styles.item}><Image source={{ uri: orderItem.Product?.image_url || orderItem.product?.image_url }} style={styles.itemImage} /><Text style={styles.text}>Produto: {orderItem.Product?.name || orderItem.product?.name || `#${orderItem.productId}`} x {orderItem.quantity}{orderItem.size ? ` (${orderItem.size})` : ''}</Text></View>)}
+    {(item.OrderItems || item.orderItems || []).map((orderItem) => <View key={orderItem.id} style={styles.item}><Image source={{ uri: orderItem.Product?.image_url || orderItem.product?.image_url }} style={styles.itemImage} /><Text style={styles.text}>Produto: {orderItem.Product?.name || orderItem.product?.name || `#${orderItem.productId}`} x {orderItem.quantity}{orderItem.size ? ` (${orderItem.size})` : ''}</Text></View>)}
   </View>} /></View>;
 }
 

@@ -33,115 +33,116 @@ export function RegisterScreen() {
       await api.post('users', { name, email, cpf, phone, address, password });
       Toast.show({ type: 'success', text1: 'Conta criada', text2: 'Agora faça login.' });
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Erro no cadastro', text2: error.response?.data?.message || 'Não foi possível criar a conta.' });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Erro no cadastro', text2: requestError.response?.data?.message ?? 'Não foi possível criar a conta.' });
     }
   };
 
   return (
     <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <View style={styles.iconBox}>
-          <Text style={{ fontSize: 24 }}>🛒</Text>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <View style={styles.header}>
+          <View style={styles.iconBox}>
+            <Text style={{ fontSize: 24 }}>🛒</Text>
+          </View>
+          <Text style={styles.brandTitle}>CodeWear</Text>
+          <Text style={styles.brandSubtitle}>Cadastre-se</Text>
         </View>
-        <Text style={styles.brandTitle}>CodeWear</Text>
-        <Text style={styles.brandSubtitle}>Cadastre-se</Text>
-      </View>
 
-      <View style={styles.card}>
-        <Text style={styles.title}>Cadastro</Text>
+        <View style={styles.card}>
+          <Text style={styles.title}>Cadastro</Text>
 
-        <View style={styles.row}>
-          <View style={[styles.inputGroup, styles.halfWidth]}>
-            <Text style={styles.label}>👤 Nome Completo</Text>
+          <View style={styles.row}>
+            <View style={[styles.inputGroup, styles.halfWidth]}>
+              <Text style={styles.label}>👤 Nome Completo</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Seu nome"
+                placeholderTextColor="#555"
+                value={name}
+                onChangeText={setName}
+              />
+            </View>
+            <View style={[styles.inputGroup, styles.halfWidth]}>
+              <Text style={styles.label}>✉ E-mail</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="exemplo@email.com"
+                placeholderTextColor="#555"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={[styles.inputGroup, styles.halfWidth]}>
+              <Text style={styles.label}>💳 CPF</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="000.000.000-00"
+                placeholderTextColor="#555"
+                value={cpf}
+                onChangeText={setCpf}
+              />
+            </View>
+            <View style={[styles.inputGroup, styles.halfWidth]}>
+              <Text style={styles.label}>📞 Telefone</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="(00) 00000-0000"
+                placeholderTextColor="#555"
+                value={phone}
+                onChangeText={setPhone}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>📍 Endereço</Text>
             <TextInput
               style={styles.input}
-              placeholder="Seu nome"
+              placeholder="Rua, número, bairro e cidade"
               placeholderTextColor="#555"
-              value={name}
-              onChangeText={setName}
+              value={address}
+              onChangeText={setAddress}
             />
           </View>
-          <View style={[styles.inputGroup, styles.halfWidth]}>
-            <Text style={styles.label}>✉ E-mail</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>🔒 Senha</Text>
             <TextInput
               style={styles.input}
-              placeholder="exemplo@email.com"
+              placeholder="Mínimo 8 caracteres"
               placeholderTextColor="#555"
-              value={email}
-              onChangeText={setEmail}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
             />
           </View>
-        </View>
 
-        <View style={styles.row}>
-          <View style={[styles.inputGroup, styles.halfWidth]}>
-            <Text style={styles.label}>💳 CPF</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>🔒 Confirmar Senha</Text>
             <TextInput
               style={styles.input}
-              placeholder="000.000.000-00"
+              placeholder="Repita sua senha"
               placeholderTextColor="#555"
-              value={cpf}
-              onChangeText={setCpf}
+              secureTextEntry
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
             />
           </View>
-          <View style={[styles.inputGroup, styles.halfWidth]}>
-            <Text style={styles.label}>📞 Telefone</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="(00) 00000-0000"
-              placeholderTextColor="#555"
-              value={phone}
-              onChangeText={setPhone}
-            />
-          </View>
+
+          <TouchableOpacity style={styles.btnPrimary} onPress={handleRegister}>
+            <Text style={styles.btnPrimaryText}>Criar Conta</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.backLink} onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.backLinkText}>← Já tenho conta</Text>
+          </TouchableOpacity>
         </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>📍 Endereço</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Rua, número, bairro e cidade"
-            placeholderTextColor="#555"
-            value={address}
-            onChangeText={setAddress}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>🔒 Senha</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Mínimo 8 caracteres"
-            placeholderTextColor="#555"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>🔒 Confirmar Senha</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Repita sua senha"
-            placeholderTextColor="#555"
-            secureTextEntry
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
-        </View>
-
-        <TouchableOpacity style={styles.btnPrimary} onPress={handleRegister}>
-          <Text style={styles.btnPrimaryText}>Criar Conta</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.backLinkText}>← Já tenho conta</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

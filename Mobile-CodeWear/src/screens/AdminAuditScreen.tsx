@@ -2,13 +2,28 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { api } from '../services/api';
 
+interface AuditLogEntry {
+  id: number;
+  action: string;
+  adminName?: string;
+  details: string;
+  createdAt: string;
+}
+
+const auditActionLabels: Record<string, string> = {
+  CREATE_PRODUCT: 'Produto criado',
+  UPDATE_PRODUCT: 'Produto atualizado',
+  DELETE_PRODUCT: 'Produto excluído',
+  DELETE_ORDER: 'Pedido excluído',
+};
+
 export function AdminAuditScreen() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('admin/logs?limit=50')
-      .then(({ data }) => setLogs(data.logs || []))
+    api.get<{ logs: AuditLogEntry[] }>('admin/logs?limit=50')
+      .then(({ data }) => setLogs(data.logs ?? []))
       .catch((error) => console.error('Erro ao carregar auditoria:', error))
       .finally(() => setLoading(false));
   }, []);
@@ -21,7 +36,7 @@ export function AdminAuditScreen() {
           data={logs}
           keyExtractor={(item) => String(item.id)}
           ListEmptyComponent={<Text style={styles.subtitle}>Nenhum registro encontrado.</Text>}
-          renderItem={({ item }) => <View style={styles.row}><Text style={styles.action}>{({ CREATE_PRODUCT: 'Produto criado', UPDATE_PRODUCT: 'Produto atualizado', DELETE_PRODUCT: 'Produto excluído', DELETE_ORDER: 'Pedido excluído' } as any)[item.action] || item.action}</Text><Text style={styles.subtitle}>Por: {item.adminName || 'Administrador'}</Text><Text style={styles.subtitle}>{item.details}</Text><Text style={styles.date}>{new Date(item.createdAt).toLocaleString('pt-BR')}</Text></View>}
+          renderItem={({ item }) => <View style={styles.row}><Text style={styles.action}>{auditActionLabels[item.action] ?? item.action}</Text><Text style={styles.subtitle}>Por: {item.adminName || 'Administrador'}</Text><Text style={styles.subtitle}>{item.details}</Text><Text style={styles.date}>{new Date(item.createdAt).toLocaleString('pt-BR')}</Text></View>}
         />
       )}
     </View>

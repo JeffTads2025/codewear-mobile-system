@@ -2,16 +2,36 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TextInput, TouchableOpacity } from 'react-native';
 import { api } from '../services/api';
 
+interface SalesOrderItem {
+  id: number;
+  productId: number;
+  quantity: number;
+  size?: string;
+  Product?: { name?: string };
+  product?: { name?: string };
+}
+
+interface SalesOrder {
+  id: number;
+  createdAt: string;
+  totalValue: number;
+  status: string;
+  User?: { name?: string };
+  user?: { name?: string };
+  OrderItems?: SalesOrderItem[];
+  orderItems?: SalesOrderItem[];
+}
+
 export function AdminSalesScreen() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ totalRevenue: 0, totalUsers: 0, totalOrders: 0, dailyRevenue: 0, monthlyRevenue: 0, yearlyRevenue: 0 });
   const [filterDate, setFilterDate] = useState({ day: '', month: '', year: String(new Date().getFullYear()) });
 
   useEffect(() => {
     loadDashboard();
-    api.get('admin/all-orders?limit=50')
-      .then(({ data }) => setOrders(data.orders || []))
+    api.get<{ orders: SalesOrder[] }>('admin/all-orders?limit=50')
+      .then(({ data }) => setOrders(data.orders ?? []))
       .catch((error) => console.error('Erro ao carregar vendas:', error))
       .finally(() => setLoading(false));
   }, []);
@@ -64,7 +84,7 @@ export function AdminSalesScreen() {
               <Text style={styles.itemText}>{new Date(item.createdAt).toLocaleString('pt-BR')}</Text>
               <Text style={styles.itemText} numberOfLines={1}>R$ {Number(item.totalValue || 0).toFixed(2).replace('.', ',')}</Text>
               <Text style={styles.status}>{item.status}</Text>
-              {(item.OrderItems || item.orderItems || []).map((orderItem: any) => <Text style={styles.detail} key={orderItem.id}>{orderItem.Product?.name || orderItem.product?.name || `Produto #${orderItem.productId}`} x {orderItem.quantity}{orderItem.size ? ` (${orderItem.size})` : ''}</Text>)}
+              {(item.OrderItems || item.orderItems || []).map((orderItem) => <Text style={styles.detail} key={orderItem.id}>{orderItem.Product?.name || orderItem.product?.name || `Produto #${orderItem.productId}`} x {orderItem.quantity}{orderItem.size ? ` (${orderItem.size})` : ''}</Text>)}
             </View>
           )}
         />

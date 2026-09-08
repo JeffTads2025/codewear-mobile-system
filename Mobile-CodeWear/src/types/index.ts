@@ -28,6 +28,7 @@ export interface Product {
   name: string;
   price: number;
   stock: number;
+  description?: string;
   image_url?: string;
   sizes?: ProductSize[];
   promotions?: Promotion[];

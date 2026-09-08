@@ -1,16 +1,17 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { NavigatorScreenParams } from '@react-navigation/native';
 
 import { HomeScreen } from '../screens/HomeScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
-import { CartScreen } from '../screens/CartScreen';
 import { ProductDetailScreen } from '../screens/ProductDetailScreen';
 import { Product } from '../data/products';
 import { ProfileScreen } from '../screens/ProfileScreen';
-import { OrdersScreen } from '../screens/OrdersScreen';
 import { ContactScreen } from '../screens/ContactScreen';
 import { useAuth } from '../context/AuthContext';
+import { ClientTopTabs } from './ClientTopTabs';
+import type { ClientTabParamList } from './ClientTopTabs';
 
 // Import da navegação em abas do Administrador
 import { AdminTopTabs } from './AdminTopTabs';
@@ -18,12 +19,10 @@ import { AdminTopTabs } from './AdminTopTabs';
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
-  Home: undefined;
-  Cart: undefined;
+  ClientApp: NavigatorScreenParams<ClientTabParamList> | undefined;
   ProductDetail: { product: Product };
   AdminApp: undefined; // Adicionado para o TypeScript reconhecer a rota do Admin
   Profile: undefined;
-  Orders: undefined;
   Contact: undefined;
 };
 
@@ -41,16 +40,14 @@ export function Routes() {
         gestureEnabled: true,
         fullScreenGestureEnabled: true,
       }}
-      initialRouteName={isAuthenticated ? 'Home' : 'Home'}
+      initialRouteName="ClientApp"
     >
       {!isAuthenticated && <Stack.Screen name="Login" component={LoginScreen} options={{ gestureEnabled: false }} />}
       {!isAuthenticated && <Stack.Screen name="Register" component={RegisterScreen} />}
-      <Stack.Screen name="Home" component={HomeScreen} />
-      {isAuthenticated && <Stack.Screen name="Cart" component={CartScreen} />}
+      <Stack.Screen name="ClientApp" component={ClientTopTabs} />
       {isAuthenticated && <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />}
-      {isAuthenticated && <Stack.Screen name="AdminApp" component={AdminTopTabs} />}
+      <Stack.Screen name="AdminApp" component={AdminTopTabs} />
       {isAuthenticated && <Stack.Screen name="Profile" component={ProfileScreen} />}
-      {isAuthenticated && <Stack.Screen name="Orders" component={OrdersScreen} />}
       {isAuthenticated && <Stack.Screen name="Contact" component={ContactScreen} />}
     </Stack.Navigator>
   );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { Alert, View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../routes';
@@ -25,12 +25,12 @@ export function LoginScreen() {
 
     try {
       // Ajustado para 'login/' (com barra final para evitar redirect 301 no Nginx/Docker)
-      const response = await api.post('login/', { email, password });
-      await signIn(response.data.token);
-      
-      const user = response.data.user || response.data; 
+      const response = await api.post<{ token: string; user: { id: number; name: string; role: 'admin' | 'client'; avatarUrl?: string } }>('login/', { email, password });
+      await signIn(response.data.token, response.data.user);
 
-      if (user.isAdmin || user.role === 'admin') {
+      const user = response.data.user || response.data;
+
+      if (user.role === 'admin') {
         navigation.reset({
           index: 0,
           routes: [{ name: 'AdminApp' }],
@@ -38,66 +38,70 @@ export function LoginScreen() {
       } else {
         navigation.reset({
           index: 0,
-          routes: [{ name: 'Home' }],
+          routes: [{ name: 'ClientApp' }],
         });
       }
-    } catch (error: any) {
-      console.error('Erro no login:', error);
-      const message = error.response?.data?.message || 'Não foi possível conectar ao servidor.';
+    } catch (error: unknown) {
+      const requestError = error as { response?: { status?: number; data?: { message?: string } } };
+      if (requestError.response?.status === 401) {
+        Alert.alert('Erro', 'Usuário ou senha inválidos');
+        return;
+      }
+      const message = requestError.response?.data?.message ?? 'Não foi possível conectar ao servidor.';
       Toast.show({ type: 'error', text1: 'Erro ao entrar', text2: message });
     }
   };
 
   return (
     <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.card}>
-        <Text style={styles.title}>Login</Text>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <View style={styles.card}>
+          <Text style={styles.title}>Login</Text>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>✉ E-mail</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Digite seu e-mail"
-            placeholderTextColor="#666"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>🔒 Senha</Text>
-          <View style={styles.passwordInputContainer}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>✉ E-mail</Text>
             <TextInput
-              style={styles.inputPassword}
-              placeholder="Digite sua senha"
+              style={styles.input}
+              placeholder="Digite seu e-mail"
               placeholderTextColor="#666"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
             />
-            <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.togglePasswordBtn}
-            >
-              <Text style={styles.togglePasswordIcon}>
-                {showPassword ? '👁️' : '👁️‍🗨️'}
-              </Text>
-            </TouchableOpacity>
           </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>🔒 Senha</Text>
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.inputPassword}
+                placeholder="Digite sua senha"
+                placeholderTextColor="#666"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.togglePasswordBtn}
+              >
+                <Text style={styles.togglePasswordIcon}>
+                  {showPassword ? '👁️' : '👁️‍🗨️'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin}>
+            <Text style={styles.btnPrimaryText}>Entrar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.btnSecondary} onPress={() => navigation.navigate('Register')}>
+            <Text style={styles.btnSecondaryText}>Cadastre-se</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin}>
-          <Text style={styles.btnPrimaryText}>Entrar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnSecondary} onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.btnSecondaryText}>Cadastre-se</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

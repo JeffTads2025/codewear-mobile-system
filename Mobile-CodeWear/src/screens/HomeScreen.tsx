@@ -6,53 +6,36 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Modal,
-  Animated,
   useWindowDimensions,
   StatusBar,
 } from 'react-native';
-import { PinchGestureHandler, State } from 'react-native-gesture-handler';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { MaterialTopTabNavigationProp } from '@react-navigation/material-top-tabs';
+import { CompositeNavigationProp } from '@react-navigation/native';
 
 import { Product } from '../data/products';
 import { api, getApiAssetUrl } from '../services/api';
 import { RootStackParamList } from '../routes';
+import { ClientTabParamList } from '../routes/ClientTopTabs';
 import { useCart } from '../context/CartContext';
 import { sortSizes } from '../utils/sizes';
-import { useAuth } from '../context/AuthContext';
+import { AuthUser, useAuth } from '../context/AuthContext';
 import Toast from 'react-native-toast-message';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
-
-function ZoomImage({ source, style, onError }: { source: any; style: any; onError?: () => void }) {
-  const scale = React.useRef(new Animated.Value(1)).current;
-  return (
-    <PinchGestureHandler
-      onGestureEvent={Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true })}
-      onHandlerStateChange={({ nativeEvent }) => {
-        if (nativeEvent.state === State.END) Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
-      }}
-    >
-      <Animated.View style={{ overflow: 'hidden' }}>
-        <Animated.Image
-          source={source}
-          style={[style, { transform: [{ scale }] }]}
-          resizeMode="cover"
-          onError={onError}
-        />
-      </Animated.View>
-    </PinchGestureHandler>
-  );
-}
+type NavigationProp = CompositeNavigationProp<
+  MaterialTopTabNavigationProp<ClientTabParamList, 'Home'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export function HomeScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { addToCart, cartCount } = useCart();
-  const { isAuthenticated, signOut } = useAuth();
+  const { isAuthenticated, signOut, user: profile, setUser } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
 
   const isMobile = windowWidth < 600;
@@ -62,7 +45,6 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
-  const [profile, setProfile] = useState<any>(null);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   const [selectedSizes, setSelectedSizes] = useState<{ [key: string]: string }>({});
@@ -91,8 +73,10 @@ export function HomeScreen() {
 
   useFocusEffect(useCallback(() => {
     loadProducts();
-    api.get('me').then(({ data }) => setProfile(data)).catch(() => undefined);
-  }, [loadProducts]));
+    if (isAuthenticated) {
+      api.get<AuthUser>('me').then(({ data }) => setUser(data)).catch(() => setUser(null));
+    }
+  }, [isAuthenticated, loadProducts, setUser]));
 
   const avatarUrl = getApiAssetUrl(profile?.avatarUrl);
   const avatarSource = avatarUrl ? { uri: avatarUrl } : undefined;
@@ -133,23 +117,28 @@ export function HomeScreen() {
     const stock = Number(product.stock ?? product.estoque ?? 0);
     const qty = Math.min(quantities[product.id] || 1, stock);
     addToCart(product, size, qty);
-    navigation.navigate('Cart');
+    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('ClientApp', { screen: 'Cart' });
   };
 
-  const getImageSource = (image: any) => {
-    if (typeof image === 'string') {
-      const imageUrl = getApiAssetUrl(image);
-      if (failedImages.has(imageUrl || '')) {
-        return { uri: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23222%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2212%22%3EImagem não disponível%3C/text%3E%3C/svg%3E' };
-      }
-      return { uri: imageUrl };
+  const navigateToClientTab = (screen: 'Cart' | 'Orders') => {
+    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('ClientApp', { screen });
+  };
+
+  const getImageSource = (image?: string) => {
+    const imageUrl = getApiAssetUrl(image);
+    if (!imageUrl || failedImages.has(imageUrl)) {
+      return { uri: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23222%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2212%22%3EImagem não disponível%3C/text%3E%3C/svg%3E' };
     }
-    return image;
+    return { uri: imageUrl };
   };
 
   const handleLogout = async () => {
     await signOut();
-    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    setMenuOpen(false);
+    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.reset({
+      index: 0,
+      routes: [{ name: 'ClientApp' }],
+    });
   };
 
   const requireLogin = () => {
@@ -179,13 +168,15 @@ export function HomeScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
-          <Text style={styles.greeting} numberOfLines={1}>
-            Olá, {profile?.name?.split(' ')[0] || 'cliente'} !
-          </Text>
+          <TouchableOpacity disabled={isAuthenticated} onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.greeting} numberOfLines={1}>
+              {isAuthenticated ? `Olá, ${profile?.name?.split(' ')[0] || 'cliente'} !` : 'FAÇA LOGIN!'}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity onPress={() => requireLogin() && navigation.navigate('Profile')}>
             {avatarSource ? (
-              <Image source={avatarSource} style={styles.headerAvatar as any} />
+              <Image source={avatarSource} style={styles.headerAvatar} />
             ) : (
               <View style={styles.headerAvatarFallback}>
                 <Text style={styles.avatarText}>
@@ -197,7 +188,7 @@ export function HomeScreen() {
 
           <TouchableOpacity
             style={styles.cartButton}
-            onPress={() => requireLogin() && navigation.navigate('Cart')}
+            onPress={() => requireLogin() && navigateToClientTab('Cart')}
           >
             <Text style={styles.cartIcon}>🛒</Text>
             {cartCount > 0 && (
@@ -300,7 +291,7 @@ export function HomeScreen() {
                       <Text style={styles.inStockText}>✅ Disp: {stock} un</Text>
                     )}
 
-                    <Text style={styles.productDescription} numberOfLines={2}>
+                    <Text style={styles.productDescription}>
                       {item.description ||
                         'Tamanho único - Unissex. Algodão 100% penteado super macio.'}
                     </Text>
@@ -408,7 +399,7 @@ export function HomeScreen() {
               style={styles.menuItem}
               onPress={() => {
                 setMenuOpen(false);
-                requireLogin() && navigation.navigate('Orders');
+                requireLogin() && navigateToClientTab('Orders');
               }}
             >
               <Text style={styles.menuText}>Meus pedidos</Text>
@@ -417,7 +408,7 @@ export function HomeScreen() {
               style={styles.menuItem}
               onPress={() => {
                 setMenuOpen(false);
-                requireLogin() && navigation.navigate('Cart');
+                requireLogin() && navigateToClientTab('Cart');
               }}
             >
               <Text style={styles.menuText}>Carrinho</Text>
@@ -522,6 +513,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    paddingRight: 8,
   },
   menuIcon: {
     color: '#ffcc00',
@@ -547,15 +539,16 @@ const styles = StyleSheet.create({
   },
   cartButton: {
     position: 'relative',
-    padding: 6,
+    padding: 8,
+    marginRight: 4,
   },
   cartIcon: {
     fontSize: 18,
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -6,
+    top: 0,
+    right: 0,
     backgroundColor: '#FF3B30',
     borderRadius: 8,
     minWidth: 15,
@@ -644,7 +637,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
     overflow: 'hidden',
-    height: 460,
+    minHeight: 460,
   },
   productImage: {
     width: '100%',
@@ -680,7 +673,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginBottom: 6,
     lineHeight: 13,
-    height: 26,
+    minHeight: 26,
   },
   sizeLabel: {
     color: '#AAA',

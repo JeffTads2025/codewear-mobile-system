@@ -17,6 +17,7 @@ export function ProductCard({ product, onPress }: ProductCardProps) {
       <Image source={{ uri: imageUrl }} style={styles.image} />
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>{product.name}</Text>
+        {product.description && <Text style={styles.description}>{product.description}</Text>}
         <Text style={styles.price}>R$ {Number(product.price).toFixed(2)}</Text>
       </View>
     </TouchableOpacity>
@@ -47,6 +48,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: theme.colors.primary,
+  },
+  description: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#64748B',
   },
   price: {
     fontSize: 14,

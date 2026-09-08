@@ -24,7 +24,7 @@ export function ProductDetailScreen() {
 
   const { product } = route.params;
 
-  // Resolução segura de propriedades sem type casting ('any')
+  // Resolução segura de propriedades sem conversões de tipo inseguras.
   const productName = product.name ?? product.nome ?? 'Produto';
   const imageUrl = product.image_url ?? product.image ?? product.imagemUrl ?? 'https://via.placeholder.com/300';
   const productPrice = Number(product.price ?? product.preco ?? 0);
@@ -52,7 +52,7 @@ export function ProductDetailScreen() {
 
   const handleAddToCart = () => {
     addToCart(product, selectedSize, quantity);
-    navigation.navigate('Cart');
+    navigation.navigate('ClientApp', { screen: 'Cart' });
   };
 
   return (

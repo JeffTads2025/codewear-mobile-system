@@ -3,6 +3,16 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert,
 import { api } from '../services/api';
 import Toast from 'react-native-toast-message';
 import { sortSizes } from '../utils/sizes';
+import { Product } from '../data/products';
+
+type StockSize = { id?: number; size: string; stock: number | string };
+type AdminProduct = Omit<Product, 'id' | 'name' | 'price' | 'stock' | 'sizes'> & {
+  id: number;
+  name: string;
+  price: number | string;
+  stock: number | string;
+  sizes?: StockSize[];
+};
 
 export function AdminDashboardScreen() {
   const [name, setName] = useState('');
@@ -13,13 +23,14 @@ export function AdminDashboardScreen() {
   const [promotionDiscount, setPromotionDiscount] = useState('');
   const [promotionValidUntil, setPromotionValidUntil] = useState('');
   const [sizeStocks, setSizeStocks] = useState({ P: '', M: '', G: '', GG: '' });
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<AdminProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [savingProductId, setSavingProductId] = useState<number | null>(null);
+  const [hidingProductId, setHidingProductId] = useState<number | null>(null);
 
   useEffect(() => {
-    api.get('products?limit=100')
-      .then(({ data }) => setProducts(data.products || data))
+    api.get<{ products: AdminProduct[] } | AdminProduct[]>('products?limit=100')
+      .then(({ data }) => setProducts(Array.isArray(data) ? data : data.products))
       .catch((error) => console.error('Erro ao carregar estoque:', error))
       .finally(() => setLoadingProducts(false));
   }, []);
@@ -37,7 +48,11 @@ export function AdminDashboardScreen() {
     setPromotionValidUntil(parts.join('/'));
   };
 
-  const updateStock = async (product: any) => {
+  const getStockSizes = (product: AdminProduct): StockSize[] => product.sizes?.length
+    ? product.sizes
+    : ['P', 'M', 'G', 'GG'].map((size) => ({ size, stock: 0 }));
+
+  const updateStock = async (product: AdminProduct) => {
     setSavingProductId(product.id);
     try {
       const response = await api.put(`products/${product.id}`, {
@@ -45,18 +60,44 @@ export function AdminDashboardScreen() {
         price: Math.max(0, Number(product.price) || 0),
         description: product.description,
         stock: Math.max(0, Number(product.stock) || 0),
-        sizes: sortSizes(product.sizes?.length ? product.sizes : ['P', 'M', 'G', 'GG'].map((size) => ({ size, stock: 0 }))).map((size: any) => ({
+        sizes: sortSizes(getStockSizes(product)).map((size) => ({
           size: size.size,
           stock: Math.max(0, Number(size.stock) || 0),
         })),
       });
       setProducts((current) => current.map((item) => item.id === product.id ? response.data.product : item));
       Toast.show({ type: 'success', text1: 'Sucesso', text2: 'Estoque atualizado.' });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Erro', text2: error.response?.data?.message || 'Não foi possível atualizar o estoque.' });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível atualizar o estoque.' });
     } finally {
       setSavingProductId(null);
     }
+  };
+
+  const hideProduct = async (product: AdminProduct) => {
+    setHidingProductId(product.id);
+    try {
+      await api.delete(`products/${product.id}`);
+      setProducts((current) => current.filter((item) => item.id !== product.id));
+      Toast.show({ type: 'success', text1: 'Produto removido', text2: 'O produto não aparece mais no estoque nem na vitrine.' });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível remover o produto.' });
+    } finally {
+      setHidingProductId(null);
+    }
+  };
+
+  const confirmHideProduct = (product: AdminProduct) => {
+    Alert.alert(
+      'Remover do estoque?',
+      'O produto deixará de aparecer no estoque e na vitrine. Pedidos anteriores serão preservados.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Remover', style: 'destructive', onPress: () => void hideProduct(product) },
+      ]
+    );
   };
 
   const handleCreateProduct = async () => {
@@ -80,8 +121,9 @@ export function AdminDashboardScreen() {
       });
       Toast.show({ type: 'success', text1: 'Sucesso', text2: `Produto "${name}" cadastrado!` });
       setName(''); setPrice(''); setStock(''); setImageUrl(''); setPromotionCode(''); setPromotionDiscount(''); setPromotionValidUntil(''); setSizeStocks({ P: '', M: '', G: '', GG: '' });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Erro', text2: error.response?.data?.message || 'Não foi possível cadastrar o produto.' });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível cadastrar o produto.' });
     }
   };
 
@@ -132,7 +174,7 @@ export function AdminDashboardScreen() {
 
       <Text style={styles.sectionTitle}>Estoque atual</Text>
       {loadingProducts ? <ActivityIndicator color="#ffcc00" /> : products.map((product) => {
-        const stockSizes = sortSizes(product.sizes?.length ? product.sizes : ['P', 'M', 'G', 'GG'].map((size) => ({ size, stock: 0 })));
+        const stockSizes = sortSizes(getStockSizes(product));
         return (
           <View style={styles.stockCard} key={product.id}>
             <View style={styles.productHeader}><Image source={{ uri: product.image_url }} style={styles.stockImage} /><Text style={styles.productTitle}>{product.name}</Text></View>
@@ -152,7 +194,7 @@ export function AdminDashboardScreen() {
             <TextInput style={styles.input} value={String(product.description || '')} onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id ? { ...item, description: value } : item))} multiline />
             <Text style={styles.label}>Preço</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={String(product.price || 0)} onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id ? { ...item, price: value } : item))} />
-            {stockSizes.map((size: any) => (
+            {stockSizes.map((size) => (
               <View style={styles.sizeRow} key={size.id || size.size}>
                 <Text style={styles.sizeName}>Tamanho {size.size}</Text>
                 <TextInput
@@ -160,17 +202,19 @@ export function AdminDashboardScreen() {
                   keyboardType="numeric"
                   value={String(size.stock ?? 0)}
                   onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id
-                    ? { ...item, sizes: (item.sizes?.length ? item.sizes : stockSizes).map((itemSize: any) => itemSize.size === size.size ? { ...itemSize, stock: value } : itemSize) }
+                    ? { ...item, sizes: (item.sizes?.length ? item.sizes : stockSizes).map((itemSize) => itemSize.size === size.size ? { ...itemSize, stock: value } : itemSize) }
                     : item))}
                 />
               </View>
             ))}
             <TouchableOpacity style={styles.stockButton} disabled={savingProductId === product.id} onPress={() => updateStock(product)}>
               <Text style={styles.submitText}>{savingProductId === product.id ? 'Salvando...' : 'Atualizar'}</Text>
-              
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.removeButton} disabled={hidingProductId === product.id} onPress={() => confirmHideProduct(product)}>
+              <Text style={styles.submitText}>{hidingProductId === product.id ? 'Removendo...' : 'Remover do estoque'}</Text>
             </TouchableOpacity>
           </View>
-          
+
 
         );
       })}
@@ -201,4 +245,5 @@ const styles = StyleSheet.create({
   sizeName: { color: '#aaa', width: 110 },
   sizeInput: { flex: 1, backgroundColor: '#0d0d0d', borderWidth: 1, borderColor: '#2b2b2b', color: '#fff', borderRadius: 6, padding: 10 },
   stockButton: { backgroundColor: '#0080ff', borderRadius: 6, padding: 12, alignItems: 'center', marginTop: 14 },
+  removeButton: { backgroundColor: '#b42318', borderRadius: 6, padding: 12, alignItems: 'center', marginTop: 8 },
 });
