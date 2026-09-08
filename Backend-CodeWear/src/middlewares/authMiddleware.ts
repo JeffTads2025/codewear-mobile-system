@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { AuthRequest } from '../types';
+import { AuthRequest, UserRole } from '../types';
 import User from '../models/UserModel';
 import { isCancelledEmail } from '../utils/accountCancellation';
 
@@ -8,15 +8,20 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
   const authHeader = req.headers.authorization;
 
 
-  if (!authHeader) {
+  if (!authHeader?.startsWith('Bearer ')) {
     console.log("ALERTA: Requisição sem header de autorização.");
-    return res.status(401).json({ message: "Login necessário" });
+    return res.status(401).json({ message: "Use o cabeçalho Authorization: Bearer <token>" });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.slice('Bearer '.length).trim();
+  const jwtSecret = process.env.JWT_SECRET;
+
+  if (!token || !jwtSecret) {
+    return res.status(401).json({ message: "Sessão inválida ou servidor sem chave JWT configurada" });
+  }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'chave_secreta_padrao') as {
+    const decoded = jwt.verify(token, jwtSecret) as {
       id: number;
       name: string;
       role: 'admin' | 'client'
@@ -36,17 +41,21 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       role: currentUser.role
     };
 
-    // Proteção de rotas administrativas
-    const isAdminRoute = req.originalUrl.includes('admin') ||
-      (req.originalUrl.includes('products') && req.method !== 'GET');
-
-    if (isAdminRoute && req.user.role !== 'admin') {
-      return res.status(403).json({ message: "Acesso restrito ao administrador" });
-    }
-
     next();
   } catch (error) {
     console.log("ERRO JWT:", error);
     return res.status(401).json({ message: "Sessão expirada ou inválida" });
   }
+};
+
+export const authorizeRole = (...allowedRoles: UserRole[]) => (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || !allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ message: 'Acesso sem permissão para esta função.' });
+  }
+
+  next();
 };

@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { DataTypes } from 'sequelize';
 import sequelize from './config/database';
 
 // Importação dos Modelos (Necessário para o Sequelize criar/sincronizar as tabelas)
@@ -22,9 +23,9 @@ const PORT = Number(process.env.PORT) || 3000;
 
 // Middlewares
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
@@ -32,8 +33,22 @@ app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 // --- Rotas ---
 app.use(router);
 
+async function ensureProductVisibilityColumn(): Promise<void> {
+    const queryInterface = sequelize.getQueryInterface();
+    const columns = await queryInterface.describeTable('products');
+
+    if (!columns.isVisible) {
+        await queryInterface.addColumn('products', 'isVisible', {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: true
+        });
+    }
+}
+
 // --- Inicialização do Banco de Dados e Servidor ---
 sequelize.sync()
+    .then(() => ensureProductVisibilityColumn())
     .then(() => {
         console.log('✅ Banco CodeWear sincronizado automaticamente!');
         app.listen(PORT, '0.0.0.0', () => {

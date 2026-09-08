@@ -284,13 +284,14 @@ export const listProducts = async (req: AuthRequest, res: Response) => {
         const offset = (page - 1) * limit;
 
         const { count, rows } = await Product.findAndCountAll({
+            where: { isVisible: true },
             limit,
             offset,
             order: [['createdAt', 'DESC']],
             include: [
                 { model: ProductSize, as: 'sizes' },
                 { model: Promotion, as: 'promotions' }
-                ,{ model: Color, as: 'colors' }
+                , { model: Color, as: 'colors' }
             ],
             distinct: true
         });
@@ -347,7 +348,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
             include: [
                 { model: ProductSize, as: 'sizes' },
                 { model: Promotion, as: 'promotions' }
-                ,{ model: Color, as: 'colors' }
+                , { model: Color, as: 'colors' }
             ]
         });
 
@@ -416,10 +417,10 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: "Produto não encontrado" });
         }
 
-        await product.destroy();
+        await product.update({ isVisible: false });
         await createProductAuditLog(req, 'DELETE_PRODUCT', `Produto: "${product.name}"`);
 
-        return res.status(200).json({ message: "Produto deletado com sucesso" });
+        return res.status(200).json({ message: "Produto removido do estoque e da vitrine com sucesso" });
     } catch (error) {
         const isForeignKeyConstraint = error instanceof Error && isProductDeleteBlockedError(error);
 

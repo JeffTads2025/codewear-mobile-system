@@ -158,9 +158,14 @@ export const loginUser = async (req: AuthRequest, res: Response) => {
 
         if (!isMatch) return res.status(401).json({ message: "Senha incorreta." });
 
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            return res.status(500).json({ message: 'JWT_SECRET não está configurado no servidor.' });
+        }
+
         const token = jwt.sign(
             { id: user.id, name: user.name, role: user.role },
-            process.env.JWT_SECRET || 'chave_secreta_padrao',
+            jwtSecret,
             { expiresIn: '1d' }
         );
 
@@ -174,10 +179,11 @@ export const loginUser = async (req: AuthRequest, res: Response) => {
                 role: user.role,
                 phone: user.phone,
                 address: user.address
-                ,avatarUrl: user.avatarUrl
+                , avatarUrl: user.avatarUrl
             }
         });
-    } catch (error) {
+    } catch (error: unknown) {
+        console.error('Erro ao processar login:', error instanceof Error ? error.message : error);
         return res.status(500).json({ message: "Erro ao processar o login." });
     }
 };

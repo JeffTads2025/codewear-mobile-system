@@ -9,9 +9,10 @@ interface ProductAttributes {
   category?: string;
   stock: number;
   image_url?: string;
+  isVisible: boolean;
 }
 
-interface ProductCreationAttributes extends Optional<ProductAttributes, 'id' | 'image_url'> { }
+interface ProductCreationAttributes extends Optional<ProductAttributes, 'id' | 'image_url' | 'isVisible'> { }
 
 class Product extends Model<ProductAttributes, ProductCreationAttributes> implements ProductAttributes {
   public id!: number;
@@ -21,6 +22,7 @@ class Product extends Model<ProductAttributes, ProductCreationAttributes> implem
   public category?: string;
   public stock!: number;
   public image_url?: string;
+  public isVisible!: boolean;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -60,6 +62,11 @@ Product.init({
   image_url: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  isVisible: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
   }
 }, {
   sequelize,
