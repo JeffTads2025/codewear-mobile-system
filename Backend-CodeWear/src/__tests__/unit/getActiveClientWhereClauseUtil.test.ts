@@ -4,6 +4,6 @@ describe('Função getActiveClientWhereClause', () => {
   it('deve retornar um objeto para consulta ativa', () => {
     const clause = getActiveClientWhereClause();
     expect(typeof clause).toBe('object');
-    expect(clause).toHaveProperty('email');
+    expect(clause).toEqual({ role: 'client', isActive: true });
   });
 });

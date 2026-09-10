@@ -21,16 +21,20 @@ export function RegisterScreen() {
 
   const handleRegister = async () => {
     const digits = cpf.replace(/\D/g, '');
+    const normalizedEmail = email.trim().toLowerCase();
+    const phoneDigits = phone.replace(/\D/g, '');
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    const validPhone = phoneDigits.length === 10 || phoneDigits.length === 11;
     const validCpf = digits.length === 11 && !/^([0-9])\1+$/.test(digits) && [9, 10].every((position) => {
       const sum = digits.slice(0, position).split('').reduce((total, digit, index) => total + Number(digit) * (position + 1 - index), 0);
       return (sum * 10) % 11 % 10 === Number(digits[position]);
     });
-    if (!name || !email.includes('@') || !cpf || !phone || !address || password.length < 8 || password !== confirmPassword || !validCpf) {
+    if (!name.trim() || !validEmail || !validCpf || !validPhone || !address.trim() || password.length < 8 || password !== confirmPassword) {
       Toast.show({ type: 'error', text1: 'Cadastro inválido', text2: 'Confira nome, e-mail, CPF, senha e endereço.' });
       return;
     }
     try {
-      await api.post('users', { name, email, cpf, phone, address, password });
+      await api.post('users', { name: name.trim(), email: normalizedEmail, cpf: digits, phone: phoneDigits, address: address.trim(), password });
       Toast.show({ type: 'success', text1: 'Conta criada', text2: 'Agora faça login.' });
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     } catch (error: unknown) {

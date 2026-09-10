@@ -88,14 +88,6 @@ export function CartScreen() {
     try {
       setLoadingPurchase(true);
 
-      for (const item of cartItems) {
-        await api.post('cart', {
-          productId: Number(item.product.id),
-          quantity: item.quantity,
-          size: item.size,
-        });
-      }
-
       if (!address.trim()) {
         Toast.show({ type: 'info', text1: 'Endereço obrigatório', text2: 'Informe o endereço de entrega.' });
         return;

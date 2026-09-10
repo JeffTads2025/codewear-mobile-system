@@ -8,11 +8,9 @@ import Order from '../models/OrderModel';
 import OrderItem from '../models/OrderItemModel';
 import {
     buildCancelledAccountData,
-    CANCELLED_EMAIL_DOMAIN,
     getActiveClientWhereClause,
-    isCancelledEmail,
 } from '../utils/accountCancellation';
-import { validateEmail, validateCPF, validatePasswordLevel } from '../utils/validators';
+import { validateEmail, validateCPF, validatePasswordLevel, validatePhone } from '../utils/validators';
 import { AuthRequest } from '../types';
 
 interface UserUpdatePayload {
@@ -22,8 +20,6 @@ interface UserUpdatePayload {
     address?: string;
     cpf?: string;
 }
-
-type ActiveClientWhereClause = ReturnType<typeof getActiveClientWhereClause>;
 
 interface CreateUserPayload {
     name?: string;
@@ -67,7 +63,7 @@ function normalizeCreateUserPayload(payload: CreateUserPayload): NormalizedCreat
 async function findActiveUserById(userId: number): Promise<User | null> {
     const user = await User.findByPk(userId);
 
-    if (!user || isCancelledEmail(user.email)) {
+    if (!user || user.isActive === false) {
         return null;
     }
 
@@ -78,9 +74,7 @@ function buildUserListWhereClause(search: string): WhereOptions {
     if (!search) {
         return {
             role: 'client',
-            email: {
-                [Op.notLike]: `%${CANCELLED_EMAIL_DOMAIN}`,
-            },
+            isActive: true,
         };
     }
 
@@ -88,9 +82,7 @@ function buildUserListWhereClause(search: string): WhereOptions {
 
     return {
         role: 'client',
-        email: {
-            [Op.notLike]: `%${CANCELLED_EMAIL_DOMAIN}`,
-        },
+        isActive: true,
         [Op.or]: [
             where(fn('lower', col('name')), { [Op.like]: `%${normalizedSearch}%` }),
             where(fn('lower', col('email')), { [Op.like]: `%${normalizedSearch}%` }),
@@ -114,6 +106,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
         if (!validateEmail(email)) return res.status(400).json({ message: "Formato de e-mail inválido." });
         if (!validateCPF(cpf)) return res.status(400).json({ message: "CPF inválido." });
+        if (!validatePhone(phone)) return res.status(400).json({ message: "Telefone inválido." });
         if (!validatePasswordLevel(password)) return res.status(400).json({ message: "Senha muito fraca." });
 
         const userExists = await User.findOne({ where: { email } });
@@ -142,14 +135,18 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
 export const loginUser = async (req: AuthRequest, res: Response) => {
     try {
-        const { email, password } = req.body;
+        const { email, password } = req.body as { email?: unknown; password?: unknown };
+        if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
+            return res.status(400).json({ message: "E-mail e senha são obrigatórios." });
+        }
+
         const cleanEmail = email.toLowerCase().trim();
         const rawPassword = String(password || '');
         const cleanPassword = rawPassword.trim();
         const user = await User.findOne({ where: { email: cleanEmail } });
 
         if (!user) return res.status(401).json({ message: "E-mail não encontrado." });
-        if (isCancelledEmail(user.email)) return res.status(403).json({ message: "Esta conta foi cancelada." });
+        if (user.isActive === false) return res.status(403).json({ message: "Esta conta está inativa." });
 
         let isMatch = await bcrypt.compare(rawPassword, user.password);
         if (!isMatch && cleanPassword !== rawPassword) {
@@ -201,7 +198,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         });
 
         if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-        if (isCancelledEmail(user.email)) return res.status(404).json({ message: "Usuário não encontrado." });
+        if (user.isActive === false) return res.status(404).json({ message: "Usuário não encontrado." });
 
         return res.status(200).json(user);
     } catch (error) {
@@ -256,11 +253,14 @@ export const cancelMyAccount = async (req: AuthRequest, res: Response) => {
         const user = await User.findByPk(userId);
 
         if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-        if (isCancelledEmail(user.email)) {
+        if (user.isActive === false) {
             return res.status(400).json({ message: "Esta conta já foi cancelada." });
         }
 
-        await user.update(buildCancelledAccountData(user));
+        await user.update({
+            ...buildCancelledAccountData(user),
+            isActive: false,
+        });
 
         return res.status(200).json({ message: "Conta cancelada com sucesso." });
     } catch (error) {

@@ -223,7 +223,15 @@ interface ValidProductPayload extends ProductPayload {
 }
 
 function hasRequiredProductFields(payload: ProductPayload): payload is ValidProductPayload {
-    return Boolean(payload.name) && payload.price !== undefined && payload.stock !== undefined;
+    return Boolean(payload.name) && payload.price !== undefined && (payload.stock !== undefined || Boolean(payload.sizes?.length));
+}
+
+function calculateTotalStock(sizes?: SizePayload[], fallbackStock = 0): number {
+    if (!sizes?.length) return Math.max(0, Number(fallbackStock) || 0);
+
+    return sizes
+        .filter((size) => ['P', 'M', 'G', 'GG'].includes(size.size.trim().toUpperCase()))
+        .reduce((total, size) => total + Math.max(0, Number(size.stock) || 0), 0);
 }
 
 function buildCreateProductAuditDetails(name: string, price: number, stock: number, sizesCount = 0): string {
@@ -312,11 +320,12 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
         }
 
         const { name, price, stock, image_url, sizes, promotions } = payload;
+        const totalStock = calculateTotalStock(sizes, stock);
 
         const product = await Product.create({
             name,
             price,
-            stock,
+            stock: totalStock,
             image_url: image_url ?? undefined
         });
 
@@ -342,7 +351,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
             await Promotion.bulkCreate(promoRecords);
         }
 
-        await createProductAuditLog(req, 'CREATE_PRODUCT', buildCreateProductAuditDetails(name, price, stock, sizes?.length));
+        await createProductAuditLog(req, 'CREATE_PRODUCT', buildCreateProductAuditDetails(name, price, totalStock, sizes?.length));
 
         const createdProduct = await Product.findByPk(product.id, {
             include: [
@@ -371,7 +380,8 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
         }
 
         const oldData = getProductSnapshot(product);
-        const nextData = getNextProductData(product, { name, price, stock, image_url });
+        const totalStock = calculateTotalStock(sizes, stock ?? product.stock);
+        const nextData = getNextProductData(product, { name, price, stock: totalStock, image_url });
 
         await product.update({
             name: nextData.name,

@@ -2,7 +2,6 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest, UserRole } from '../types';
 import User from '../models/UserModel';
-import { isCancelledEmail } from '../utils/accountCancellation';
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -28,10 +27,10 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     };
 
     const currentUser = await User.findByPk(decoded.id, {
-      attributes: ['id', 'name', 'role', 'email']
+      attributes: ['id', 'name', 'role', 'isActive']
     });
 
-    if (!currentUser || isCancelledEmail(currentUser.email)) {
+    if (!currentUser || currentUser.isActive === false) {
       return res.status(401).json({ message: 'Conta cancelada ou indisponível' });
     }
 

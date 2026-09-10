@@ -68,9 +68,16 @@ const upload = multer({
 	dest: uploadDirectory,
 	limits: { fileSize: 5 * 1024 * 1024 },
 	fileFilter: (_request, file, callback) => {
-		const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-		if (!allowedImageTypes.includes(file.mimetype)) {
-			callback(new Error('Envie uma imagem PNG, JPG ou JPEG.'));
+		const allowedExtensionsByMimeType: Record<string, string[]> = {
+			'image/jpeg': ['.jpg', '.jpeg'],
+			'image/png': ['.png'],
+			'image/webp': ['.webp'],
+		};
+		const fileExtension = path.extname(file.originalname).toLowerCase();
+		const allowedExtensions = allowedExtensionsByMimeType[file.mimetype];
+
+		if (!allowedExtensions || !allowedExtensions.includes(fileExtension)) {
+			callback(new Error('Envie uma imagem JPG, JPEG, PNG ou WEBP válida.'));
 			return;
 		}
 		callback(null, true);
@@ -104,11 +111,31 @@ router.put('/users/profile', authMiddleware, updateUser);
 router.post('/users/avatar', authMiddleware, handleAvatarUpload, async (req, res) => {
 	const authenticatedRequest = req as AuthRequest;
 	if (!req.file || !authenticatedRequest.user) return res.status(400).json({ message: 'Imagem não enviada.' });
-	const user = await (await import('../models/UserModel')).default.findByPk(authenticatedRequest.user.id);
-	if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
-	user.avatarUrl = `/uploads/${req.file.filename}`;
-	await user.save();
-	return res.status(200).json({ avatarUrl: user.avatarUrl });
+
+	try {
+		const user = await (await import('../models/UserModel')).default.findByPk(authenticatedRequest.user.id);
+		if (!user) {
+			try {
+				await fs.promises.unlink(req.file.path);
+			} catch (cleanupError) {
+				console.error('ERRO AO REMOVER AVATAR SEM USUÁRIO:', cleanupError);
+			}
+			return res.status(404).json({ message: 'Usuário não encontrado.' });
+		}
+
+		user.avatarUrl = `/uploads/${req.file.filename}`;
+		await user.save();
+		return res.status(200).json({ avatarUrl: user.avatarUrl });
+	} catch (error) {
+		try {
+			await fs.promises.unlink(req.file.path);
+		} catch (cleanupError) {
+			console.error('ERRO AO REMOVER ARQUIVO DE AVATAR ÓRFÃO:', cleanupError);
+		}
+
+		console.error('ERRO AO ATUALIZAR AVATAR:', error);
+		return res.status(500).json({ message: 'Erro ao atualizar o avatar.' });
+	}
 });
 router.delete('/users/me', authMiddleware, cancelMyAccount);
 router.delete('/test/users', deleteTestUser);

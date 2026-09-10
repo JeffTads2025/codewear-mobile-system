@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import Cart from '../models/CartModel';
 import Product from '../models/ProductModel';
+import ProductSize from '../models/ProductSizeModel';
 import { AuthRequest } from '../types';
 
 export const addToCart = async (req: AuthRequest, res: Response): Promise<Response> => {
@@ -14,11 +15,15 @@ export const addToCart = async (req: AuthRequest, res: Response): Promise<Respon
         }
 
         let item = await Cart.findOne({ where: { userId, productId, size: size || null } });
+        const productSize = size
+            ? await ProductSize.findOne({ where: { productId, size } })
+            : null;
+        const availableStock = size ? (productSize?.stock ?? 0) : product.stock;
 
         if (item) {
-            if (product.stock < (item.quantity + quantity)) {
+            if (availableStock < (item.quantity + quantity)) {
                 return res.status(400).json({
-                    message: `Estoque insuficiente. Você já tem ${item.quantity} un. no carrinho e o estoque total é ${product.stock}.`
+                    message: `Estoque indisponível para o tamanho ${size || 'selecionado'}.`
                 });
             }
 
@@ -27,8 +32,8 @@ export const addToCart = async (req: AuthRequest, res: Response): Promise<Respon
             return res.status(200).json(item);
         }
 
-        if (product.stock < quantity) {
-            return res.status(400).json({ message: "Quantidade solicitada superior ao estoque disponível." });
+        if (availableStock < quantity) {
+            return res.status(400).json({ message: `Estoque indisponível para o tamanho ${size || 'selecionado'}.` });
         }
 
         const newItem = await Cart.create({ userId, productId, quantity, size: size || null });
@@ -72,7 +77,7 @@ export const listCart = async (req: AuthRequest, res: Response): Promise<Respons
             where: { userId },
             include: [{
                 model: Product,
-                attributes: ['id', 'name', 'price', 'image_url', 'stock'] 
+                attributes: ['id', 'name', 'price', 'image_url', 'stock']
             }],
             order: [['createdAt', 'ASC']]
         });
@@ -104,7 +109,12 @@ export const updateCartItem = async (req: AuthRequest, res: Response): Promise<R
             return res.status(404).json({ message: "Produto não encontrado" });
         }
 
-        if (product.stock < quantity) {
+        const productSize = item.size
+            ? await ProductSize.findOne({ where: { productId: item.productId, size: item.size } })
+            : null;
+        const availableStock = item.size ? (productSize?.stock ?? 0) : product.stock;
+
+        if (availableStock < quantity) {
             return res.status(400).json({ message: "Quantidade solicitada superior ao estoque disponível." });
         }
 

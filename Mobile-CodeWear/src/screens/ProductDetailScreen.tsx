@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -33,26 +34,47 @@ export function ProductDetailScreen() {
 
   // Tratamento dos tamanhos
   const rawSizes = product.sizes;
+  const hasSizeInventory = Array.isArray(rawSizes)
+    && rawSizes.some((size) => typeof size !== 'string');
   const availableSizes: string[] = Array.isArray(rawSizes)
     ? rawSizes.map((s) => (typeof s === 'string' ? s : s.size))
     : ['P', 'M', 'G', 'GG'];
+  const sizeStockByName = new Map(
+    hasSizeInventory
+      ? rawSizes.filter((size): size is { id: number; size: string; stock: number } => typeof size !== 'string').map((size) => [size.size, size.stock])
+      : availableSizes.map((size) => [size, productStock]),
+  );
   const orderedSizes = sortSizes(availableSizes);
 
   const [selectedSize, setSelectedSize] = useState<string>(orderedSizes[0] || 'M');
   const [quantity, setQuantity] = useState<number>(1);
+  const [sizeWasChosen, setSizeWasChosen] = useState(false);
 
   const isOutOfStock = productStock === 0;
+  const selectedSizeStock = hasSizeInventory
+    ? (sizeStockByName.get(selectedSize) ?? 0)
+    : (sizeStockByName.get(selectedSize) ?? productStock);
+  const isSelectedSizeOutOfStock = selectedSizeStock <= 0;
 
   const handleQuantityChange = (delta: number) => {
     const next = quantity + delta;
-    if (next >= 1 && next <= productStock) {
+    if (next >= 1 && next <= selectedSizeStock) {
       setQuantity(next);
     }
   };
 
-  const handleAddToCart = () => {
-    addToCart(product, selectedSize, quantity);
-    navigation.navigate('ClientApp', { screen: 'Cart' });
+  const handleAddToCart = async () => {
+    try {
+      await addToCart(product, selectedSize, quantity);
+      navigation.navigate('ClientApp', { screen: 'Cart' });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({
+        type: 'error',
+        text1: 'Estoque indisponível',
+        text2: requestError.response?.data?.message ?? 'Não foi possível adicionar este tamanho.',
+      });
+    }
   };
 
   return (
@@ -95,8 +117,13 @@ export function ProductDetailScreen() {
                   style={[
                     styles.sizeButton,
                     selectedSize === size && styles.sizeButtonActive,
+                    (sizeStockByName.get(size) ?? 0) <= 0 && styles.sizeButtonDisabled,
                   ]}
-                  onPress={() => setSelectedSize(size)}
+                  onPress={() => {
+                    setSelectedSize(size);
+                    setQuantity(1);
+                    setSizeWasChosen(true);
+                  }}
                 >
                   <Text
                     style={[
@@ -122,7 +149,7 @@ export function ProductDetailScreen() {
           >
             <Text style={styles.qtyBtnText}>-</Text>
           </TouchableOpacity>
-          <Text style={styles.qtyText}>{isOutOfStock ? 0 : quantity}</Text>
+          <Text style={styles.qtyText}>{isOutOfStock || isSelectedSizeOutOfStock ? 0 : quantity}</Text>
           <TouchableOpacity
             style={styles.qtyBtn}
             onPress={() => handleQuantityChange(1)}
@@ -132,14 +159,18 @@ export function ProductDetailScreen() {
           </TouchableOpacity>
         </View>
 
+        {sizeWasChosen && isSelectedSizeOutOfStock && (
+          <Text style={styles.sizeStockMessage}>Estoque indisponível para o tamanho {selectedSize}.</Text>
+        )}
+
         {/* Botão Adicionar ao Carrinho */}
         <TouchableOpacity
-          style={[styles.addToCartBtn, isOutOfStock && styles.btnDisabled]}
-          disabled={isOutOfStock}
+          style={[styles.addToCartBtn, (isOutOfStock || isSelectedSizeOutOfStock) && styles.btnDisabled]}
+          disabled={isOutOfStock || isSelectedSizeOutOfStock}
           onPress={handleAddToCart}
         >
           <Text style={styles.addToCartText}>
-            {isOutOfStock ? 'Produto Indisponível' : '🛒 Adicionar ao Carrinho'}
+            {isOutOfStock || isSelectedSizeOutOfStock ? 'Tamanho indisponível' : '🛒 Adicionar ao Carrinho'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -234,6 +265,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFCC00',
     borderColor: '#FFCC00',
   },
+  sizeButtonDisabled: {
+    opacity: 0.4,
+  },
   sizeText: {
     color: '#AAA',
     fontWeight: 'bold',
@@ -266,6 +300,11 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  sizeStockMessage: {
+    color: '#FF5252',
+    fontSize: 13,
+    marginBottom: 8,
   },
   addToCartBtn: {
     backgroundColor: '#FFCC00',

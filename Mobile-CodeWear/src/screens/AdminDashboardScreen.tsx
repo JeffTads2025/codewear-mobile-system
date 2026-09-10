@@ -52,6 +52,10 @@ export function AdminDashboardScreen() {
     ? product.sizes
     : ['P', 'M', 'G', 'GG'].map((size) => ({ size, stock: 0 }));
 
+  const getTotalStock = (sizes: StockSize[]) => sizes
+    .filter((size) => ['P', 'M', 'G', 'GG'].includes(size.size.toUpperCase()))
+    .reduce((total, size) => total + Math.max(0, Number(size.stock) || 0), 0);
+
   const updateStock = async (product: AdminProduct) => {
     setSavingProductId(product.id);
     try {
@@ -59,7 +63,7 @@ export function AdminDashboardScreen() {
         name: product.name,
         price: Math.max(0, Number(product.price) || 0),
         description: product.description,
-        stock: Math.max(0, Number(product.stock) || 0),
+        stock: getTotalStock(getStockSizes(product)),
         sizes: sortSizes(getStockSizes(product)).map((size) => ({
           size: size.size,
           stock: Math.max(0, Number(size.stock) || 0),
@@ -109,7 +113,7 @@ export function AdminDashboardScreen() {
       await api.post('products', {
         name,
         price: Number(price.replace(',', '.')),
-        stock: Number(stock || 0),
+        stock: Object.values(sizeStocks).reduce((total, value) => total + Math.max(0, Number(value) || 0), 0),
         image_url: imageUrl || undefined,
         sizes: sortSizes(Object.entries(sizeStocks).map(([size, value]) => ({ size, stock: Number(value) || 0 }))),
         promotions: promotionCode ? [{
@@ -144,8 +148,8 @@ export function AdminDashboardScreen() {
             <TextInput style={styles.input} keyboardType="numeric" value={price} onChangeText={setPrice} placeholder="0.00" placeholderTextColor="#555" />
           </View>
           <View style={styles.flex1}>
-            <Text style={styles.label}>Estoque</Text>
-            <TextInput style={styles.input} keyboardType="numeric" value={stock} onChangeText={setStock} placeholder="0" placeholderTextColor="#555" />
+            <Text style={styles.label}>Estoque total</Text>
+            <TextInput style={styles.input} value={String(Object.values(sizeStocks).reduce((total, value) => total + Math.max(0, Number(value) || 0), 0))} editable={false} />
           </View>
         </View>
         <Text style={styles.label}>Estoque por tamanho</Text>
@@ -182,12 +186,7 @@ export function AdminDashboardScreen() {
               {Number(product.stock) > 0 ? 'Em estoque' : 'Esgotado'}
             </Text>
             <Text style={styles.label}>Quantidade total</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={String(product.stock ?? 0)}
-              onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id ? { ...item, stock: value } : item))}
-            />
+            <TextInput style={styles.input} value={String(getTotalStock(stockSizes))} editable={false} />
             <Text style={styles.label}>Nome</Text>
             <TextInput style={styles.input} value={String(product.name || '')} onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id ? { ...item, name: value } : item))} />
             <Text style={styles.label}>Descrição</Text>
@@ -202,7 +201,7 @@ export function AdminDashboardScreen() {
                   keyboardType="numeric"
                   value={String(size.stock ?? 0)}
                   onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id
-                    ? { ...item, sizes: (item.sizes?.length ? item.sizes : stockSizes).map((itemSize) => itemSize.size === size.size ? { ...itemSize, stock: value } : itemSize) }
+                    ? { ...item, stock: getTotalStock((item.sizes?.length ? item.sizes : stockSizes).map((itemSize) => itemSize.size === size.size ? { ...itemSize, stock: value } : itemSize)), sizes: (item.sizes?.length ? item.sizes : stockSizes).map((itemSize) => itemSize.size === size.size ? { ...itemSize, stock: value } : itemSize) }
                     : item))}
                 />
               </View>

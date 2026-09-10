@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
 import { api, getApiAssetUrl } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 interface ProfileData {
   name: string;
@@ -28,7 +29,9 @@ export function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileData>({ name: '', email: '', cpf: '', phone: '', address: '' });
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const navigation = useNavigation();
+  const { signOut } = useAuth();
 
   useEffect(() => {
     api.get('me').then(({ data }) => setProfile(data)).catch(() => Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível carregar seu perfil.' }));
@@ -78,6 +81,39 @@ export function ProfileScreen() {
     } finally { setLoading(false); }
   };
 
+  const deleteAccount = () => {
+    Alert.alert(
+      'Excluir conta',
+      'Sua conta será desativada e você não poderá mais acessá-la. Deseja continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir conta',
+          style: 'destructive',
+          onPress: () => { void confirmDeleteAccount(); },
+        },
+      ],
+    );
+  };
+
+  const confirmDeleteAccount = async () => {
+    try {
+      setDeleting(true);
+      await api.delete('users/me');
+      await signOut();
+      navigation.navigate('Login' as never);
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({
+        type: 'error',
+        text1: 'Não foi possível excluir a conta',
+        text2: requestError.response?.data?.message ?? 'Tente novamente.',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return <ScrollView contentContainerStyle={styles.container}>
     <TouchableOpacity onPress={() => navigation.goBack()}><Text style={styles.back}>← Voltar</Text></TouchableOpacity>
     <Text style={styles.title}>Meu perfil</Text>
@@ -90,7 +126,10 @@ export function ProfileScreen() {
       <TextInput style={styles.input} value={profile[field] || ''} onChangeText={(value) => updateField(field, value)} editable={field !== 'email'} multiline={field === 'address'} />
     </View>)}
     <TouchableOpacity style={styles.button} onPress={save} disabled={loading}><Text style={styles.buttonText}>{loading ? 'Salvando...' : 'Salvar alterações'}</Text></TouchableOpacity>
+    <TouchableOpacity style={styles.deleteButton} onPress={deleteAccount} disabled={deleting || loading || uploading}>
+      <Text style={styles.deleteButtonText}>{deleting ? 'Excluindo conta...' : 'Excluir minha conta'}</Text>
+    </TouchableOpacity>
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ container: { flexGrow: 1, backgroundColor: '#0d0d0d', padding: 20 }, back: { color: '#ffcc00', marginBottom: 18 }, title: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }, avatarButton: { alignItems: 'center', marginBottom: 10 }, avatar: { width: 96, height: 96, borderRadius: 48 }, avatarFallback: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffcc00', alignItems: 'center', justifyContent: 'center' }, avatarLetter: { color: '#000', fontSize: 32, fontWeight: 'bold' }, avatarAction: { color: '#ffcc00', marginTop: 8 }, photoActions: { flexDirection: 'row', justifyContent: 'center', gap: 24, marginBottom: 8 }, label: { color: '#aaa', marginTop: 12, marginBottom: 5 }, input: { color: '#fff', backgroundColor: '#171717', borderColor: '#333', borderWidth: 1, borderRadius: 6, padding: 12 }, button: { backgroundColor: '#ffcc00', padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 22 }, buttonText: { color: '#000', fontWeight: 'bold' } });
+const styles = StyleSheet.create({ container: { flexGrow: 1, backgroundColor: '#0d0d0d', padding: 20 }, back: { color: '#ffcc00', marginBottom: 18 }, title: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }, avatarButton: { alignItems: 'center', marginBottom: 10 }, avatar: { width: 96, height: 96, borderRadius: 48 }, avatarFallback: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffcc00', alignItems: 'center', justifyContent: 'center' }, avatarLetter: { color: '#000', fontSize: 32, fontWeight: 'bold' }, avatarAction: { color: '#ffcc00', marginTop: 8 }, photoActions: { flexDirection: 'row', justifyContent: 'center', gap: 24, marginBottom: 8 }, label: { color: '#aaa', marginTop: 12, marginBottom: 5 }, input: { color: '#fff', backgroundColor: '#171717', borderColor: '#333', borderWidth: 1, borderRadius: 6, padding: 12 }, button: { backgroundColor: '#ffcc00', padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 22 }, buttonText: { color: '#000', fontWeight: 'bold' }, deleteButton: { borderColor: '#8f3030', borderWidth: 1, padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 28, marginBottom: 24 }, deleteButtonText: { color: '#e57373', fontWeight: 'bold' } });

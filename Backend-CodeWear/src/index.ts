@@ -46,9 +46,23 @@ async function ensureProductVisibilityColumn(): Promise<void> {
     }
 }
 
+ async function ensureUserStatusColumn(): Promise<void> {
+    const queryInterface = sequelize.getQueryInterface();
+    const columns = await queryInterface.describeTable('users');
+
+    if (!columns.isActive) {
+        await queryInterface.addColumn('users', 'isActive', {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: true
+        });
+    }
+}
+
 // --- Inicialização do Banco de Dados e Servidor ---
 sequelize.sync()
     .then(() => ensureProductVisibilityColumn())
+    .then(() => ensureUserStatusColumn())
     .then(() => {
         console.log('✅ Banco CodeWear sincronizado automaticamente!');
         app.listen(PORT, '0.0.0.0', () => {

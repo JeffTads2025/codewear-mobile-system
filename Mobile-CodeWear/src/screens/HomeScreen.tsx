@@ -48,6 +48,7 @@ export function HomeScreen() {
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   const [selectedSizes, setSelectedSizes] = useState<{ [key: string]: string }>({});
+  const [selectedSizesTouched, setSelectedSizesTouched] = useState<{ [key: string]: boolean }>({});
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
 
   const loadProducts = useCallback(async () => {
@@ -91,6 +92,7 @@ export function HomeScreen() {
 
   const handleSelectSize = (productId: string, size: string) => {
     setSelectedSizes((prev) => ({ ...prev, [productId]: size }));
+    setSelectedSizesTouched((prev) => ({ ...prev, [productId]: true }));
   };
 
   const handleQuantityChange = (productId: string, delta: number) => {
@@ -114,10 +116,24 @@ export function HomeScreen() {
       return;
     }
     const size = selectedSizes[product.id] || 'M';
-    const stock = Number(product.stock ?? product.estoque ?? 0);
+    const sizeRecord = product.sizes?.find((item) => typeof item !== 'string' && item.size === size);
+    const hasSizeInventory = product.sizes?.some((item) => typeof item !== 'string') ?? false;
+    const stock = hasSizeInventory
+      ? (sizeRecord && typeof sizeRecord !== 'string' ? Number(sizeRecord.stock) : 0)
+      : Number(product.stock ?? product.estoque ?? 0);
+
+    if (stock <= 0) {
+      Toast.show({ type: 'error', text1: 'Estoque indisponível', text2: `O tamanho ${size} não está disponível.` });
+      return;
+    }
+
     const qty = Math.min(quantities[product.id] || 1, stock);
-    addToCart(product, size, qty);
-    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('ClientApp', { screen: 'Cart' });
+    void addToCart(product, size, qty)
+      .then(() => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('ClientApp', { screen: 'Cart' }))
+      .catch((error: unknown) => {
+        const requestError = error as { response?: { data?: { message?: string } } };
+        Toast.show({ type: 'error', text1: 'Estoque indisponível', text2: requestError.response?.data?.message ?? `O tamanho ${size} não está disponível.` });
+      });
   };
 
   const navigateToClientTab = (screen: 'Cart' | 'Orders') => {
@@ -300,6 +316,12 @@ export function HomeScreen() {
                     <View style={styles.sizeRow}>
                       {sortSizes(item.sizes || ['P', 'M', 'G', 'GG']).map((size) => {
                         const sizeName = typeof size === 'string' ? size : size.size;
+                        const hasSizeInventory = item.sizes?.some((entry) => typeof entry !== 'string') ?? false;
+                        const sizeRecord = item.sizes?.find((entry) => typeof entry !== 'string' && entry.size === sizeName);
+                        const sizeStock = sizeRecord && typeof sizeRecord !== 'string'
+                          ? Number(sizeRecord.stock)
+                          : Number(item.stock ?? item.estoque ?? 0);
+                        const sizeUnavailable = hasSizeInventory && sizeStock <= 0;
                         const isSelected = currentSize === sizeName;
                         return (
                           <TouchableOpacity
@@ -307,6 +329,7 @@ export function HomeScreen() {
                             style={[
                               styles.sizeBtn,
                               isSelected && styles.sizeBtnSelected,
+                              sizeUnavailable && styles.sizeBtnDisabled,
                             ]}
                             onPress={() => handleSelectSize(productId, sizeName)}
                             disabled={isOutOfStock}
@@ -323,6 +346,9 @@ export function HomeScreen() {
                         );
                       })}
                     </View>
+                    {selectedSizesTouched[productId] && item.sizes?.some((entry) => typeof entry !== 'string' && entry.size === currentSize && Number(entry.stock) <= 0) && (
+                      <Text style={styles.sizeUnavailableText}>Estoque indisponível para o tamanho {currentSize}.</Text>
+                    )}
 
                     <View style={styles.cardFooter}>
                       <Text style={styles.productPrice} numberOfLines={1}>
@@ -350,7 +376,7 @@ export function HomeScreen() {
                           </TouchableOpacity>
                         </View>
 
-                        {isOutOfStock ? (
+                        {isOutOfStock || (item.sizes?.some((entry) => typeof entry !== 'string' && entry.size === currentSize && Number(entry.stock) <= 0) ?? false) ? (
                           <View style={[styles.buyBtnMobile, styles.buyBtnDisabled]}>
                             <Text style={styles.buyBtnTextDisabled}>Indisponível</Text>
                           </View>
@@ -698,6 +724,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFCC00',
     borderColor: '#FFCC00',
   },
+  sizeBtnDisabled: {
+    opacity: 0.4,
+  },
   sizeBtnText: {
     color: '#FFF',
     fontSize: 10,
@@ -705,6 +734,11 @@ const styles = StyleSheet.create({
   },
   sizeBtnTextSelected: {
     color: '#000',
+  },
+  sizeUnavailableText: {
+    color: '#FF5252',
+    fontSize: 10,
+    marginBottom: 4,
   },
   productPrice: {
     color: '#FFF',

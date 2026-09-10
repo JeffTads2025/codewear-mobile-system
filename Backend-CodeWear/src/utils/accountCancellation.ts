@@ -1,18 +1,11 @@
-import { Op } from 'sequelize';
 import User from '../models/UserModel';
 
 export const CANCELLED_EMAIL_DOMAIN = '@cancelled.codewear.local';
 
-export function isCancelledEmail(email?: string | null) {
-  return Boolean(email && email.endsWith(CANCELLED_EMAIL_DOMAIN));
-}
-
 export function getActiveClientWhereClause() {
   return {
     role: 'client',
-    email: {
-      [Op.notLike]: `%${CANCELLED_EMAIL_DOMAIN}`,
-    },
+    isActive: true,
   };
 }
 

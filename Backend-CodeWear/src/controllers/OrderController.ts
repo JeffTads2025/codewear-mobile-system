@@ -117,10 +117,8 @@ export const checkout = async (req: AuthRequest, res: Response) => {
                     transaction: t,
                     lock: t.LOCK.UPDATE
                 });
-                if (size) {
-                    if (size.stock < item.quantity) throw new Error(`Estoque insuficiente para tamanho ${item.size}`);
-                    await size.decrement('stock', { by: item.quantity, transaction: t });
-                }
+                if (!size || size.stock < item.quantity) throw new Error(`Estoque indisponível para tamanho ${item.size}`);
+                await size.decrement('stock', { by: item.quantity, transaction: t });
             }
 
             await Product.decrement('stock', {
@@ -240,7 +238,7 @@ export const getAdminDashboard = async (req: AuthRequest, res: Response) => {
         // Retorna tudo 
         return res.status(200).json({
             totalRevenue,
-            monthlyRevenue, 
+            monthlyRevenue,
             dailyRevenue,
             yearlyRevenue,
             totalOrders,
