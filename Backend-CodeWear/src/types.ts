@@ -7,7 +7,8 @@ export interface AuthRequest extends Request {
     user?: {
         id: number;
         name: string;
-        role: UserRole;
+        permissions: string[];
+        isAdmin: boolean;
     };
 }
 

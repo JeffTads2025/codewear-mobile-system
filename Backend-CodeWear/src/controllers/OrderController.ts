@@ -21,7 +21,7 @@ interface CheckoutOrderItem {
 
 function canManageOrder(order: Order, req: AuthRequest): boolean {
     const isOwner = order.userId === req.user!.id;
-    const isAdmin = req.user!.role === 'admin';
+    const isAdmin = req.user!.isAdmin;
 
     return isOwner || isAdmin;
 }
@@ -322,7 +322,7 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
         }
 
         const isOwner = order.userId === req.user!.id;
-        const isAdmin = req.user!.role === 'admin';
+        const isAdmin = req.user!.isAdmin;
 
         if (!isOwner && !isAdmin) {
             return res.status(403).json({ message: "Sem permissão para atualizar este pedido" });

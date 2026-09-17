@@ -21,7 +21,7 @@ export type RootStackParamList = {
   Register: undefined;
   ClientApp: NavigatorScreenParams<ClientTabParamList> | undefined;
   ProductDetail: { product: Product };
-  AdminApp: undefined; // Adicionado para o TypeScript reconhecer a rota do Admin
+  AdminApp: undefined; 
   Profile: undefined;
   Contact: undefined;
 };

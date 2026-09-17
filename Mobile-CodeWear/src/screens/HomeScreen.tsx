@@ -164,16 +164,9 @@ export function HomeScreen() {
     return false;
   };
 
-  const handleImageError = (imageUrl?: string) => {
-    if (imageUrl) {
-      setFailedImages(prev => new Set(prev).add(imageUrl));
-      console.warn('Erro ao carregar imagem:', imageUrl);
-    }
-  };
-
   return (
-    <SafeAreaView style={styles.outerContainer}>
-      <StatusBar backgroundColor="#0A0A0A" barStyle="light-content" translucent={false} />
+    <SafeAreaView edges={['top']} style={styles.outerContainer}>
+      <StatusBar backgroundColor="transparent" barStyle="light-content" translucent />
       <View style={styles.brandBar}>
         <Text style={styles.brandBarSymbol}>{'</>'}</Text>
         <Text style={styles.brandBarTitle}>CodeWear</Text>
@@ -220,7 +213,7 @@ export function HomeScreen() {
 
       <ScrollView
         style={styles.scrollContainer}
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, styles.productListContent]}
         showsVerticalScrollIndicator={false}
       >
         <TouchableOpacity
@@ -482,6 +475,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContainer: {
+    flex: 1,
     width: '100%',
   },
   container: {
@@ -492,13 +486,16 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 40,
   },
+  productListContent: {
+    paddingBottom: 16,
+  },
   brandBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 4,
     width: '100%',
-    paddingVertical: 8,
+    paddingBottom: 4,
     paddingHorizontal: 16,
     backgroundColor: '#0A0A0A',
   },
@@ -546,14 +543,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   headerAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   headerAvatarFallback: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#ffcc00',
     alignItems: 'center',
     justifyContent: 'center',
@@ -619,11 +616,6 @@ const styles = StyleSheet.create({
   carousel: { height: 180, borderRadius: 10, overflow: 'hidden', backgroundColor: '#161616', marginBottom: 24, position: 'relative', justifyContent: 'center', alignItems: 'center' },
   carouselImage: { width: '100%', height: 180 },
   carouselCaption: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 10, backgroundColor: 'rgba(0,0,0,0.62)' },
-  bannerTitle: {
-    color: '#FFCC00',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   bannerSubtitle: {
     color: '#888',
     fontSize: 12,

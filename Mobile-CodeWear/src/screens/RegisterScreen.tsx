@@ -1,12 +1,33 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { Alert, View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../routes';
 import { api } from '../services/api';
+import { AuthUser, useAuth } from '../context/AuthContext';
 import Toast from 'react-native-toast-message';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Register'>;
+
+function formatCpf(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 10) {
+    return digits
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2');
+  }
+  return digits
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2');
+}
 
 export function RegisterScreen() {
   const [name, setName] = useState('');
@@ -16,8 +37,10 @@ export function RegisterScreen() {
   const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [emailError, setEmailError] = useState('');
 
   const navigation = useNavigation<NavigationProp>();
+  const { signIn } = useAuth();
 
   const handleRegister = async () => {
     const digits = cpf.replace(/\D/g, '');
@@ -29,17 +52,35 @@ export function RegisterScreen() {
       const sum = digits.slice(0, position).split('').reduce((total, digit, index) => total + Number(digit) * (position + 1 - index), 0);
       return (sum * 10) % 11 % 10 === Number(digits[position]);
     });
+    if (!validEmail) {
+      setEmailError('Informe um e-mail válido, como exemplo@email.com.');
+    } else {
+      setEmailError('');
+    }
     if (!name.trim() || !validEmail || !validCpf || !validPhone || !address.trim() || password.length < 8 || password !== confirmPassword) {
       Toast.show({ type: 'error', text1: 'Cadastro inválido', text2: 'Confira nome, e-mail, CPF, senha e endereço.' });
       return;
     }
     try {
-      await api.post('users', { name: name.trim(), email: normalizedEmail, cpf: digits, phone: phoneDigits, address: address.trim(), password });
-      Toast.show({ type: 'success', text1: 'Conta criada', text2: 'Agora faça login.' });
-      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      const response = await api.post<{ token: string; user: AuthUser }>('users', {
+        name: name.trim(),
+        email: normalizedEmail,
+        cpf: digits,
+        phone: phoneDigits,
+        address: address.trim(),
+        password,
+      });
+      await signIn(response.data.token, response.data.user);
+      Toast.show({ type: 'success', text1: 'Bem-vindo à CodeWear!', text2: 'Sua conta foi criada com sucesso.' });
+      navigation.reset({ index: 0, routes: [{ name: 'ClientApp' }] });
     } catch (error: unknown) {
       const requestError = error as { response?: { data?: { message?: string } } };
-      Toast.show({ type: 'error', text1: 'Erro no cadastro', text2: requestError.response?.data?.message ?? 'Não foi possível criar a conta.' });
+      const backendMessage = requestError.response?.data?.message;
+      if (backendMessage) {
+        Alert.alert('Atenção', backendMessage);
+      } else {
+        Toast.show({ type: 'error', text1: 'Erro no cadastro', text2: 'Não foi possível criar a conta.' });
+      }
     }
   };
 
@@ -71,12 +112,18 @@ export function RegisterScreen() {
             <View style={[styles.inputGroup, styles.halfWidth]}>
               <Text style={styles.label}>✉ E-mail</Text>
               <TextInput
-                style={styles.input}
                 placeholder="exemplo@email.com"
                 placeholderTextColor="#555"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (emailError) setEmailError('');
+                }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={[styles.input, emailError && styles.inputError]}
               />
+              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
             </View>
           </View>
 
@@ -88,7 +135,8 @@ export function RegisterScreen() {
                 placeholder="000.000.000-00"
                 placeholderTextColor="#555"
                 value={cpf}
-                onChangeText={setCpf}
+                onChangeText={(value) => setCpf(formatCpf(value))}
+                keyboardType="number-pad"
               />
             </View>
             <View style={[styles.inputGroup, styles.halfWidth]}>
@@ -98,7 +146,8 @@ export function RegisterScreen() {
                 placeholder="(00) 00000-0000"
                 placeholderTextColor="#555"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(value) => setPhone(formatPhone(value))}
+                keyboardType="phone-pad"
               />
             </View>
           </View>
@@ -221,6 +270,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: '#FFF',
     fontSize: 13,
+  },
+  inputError: {
+    borderColor: '#FF5252',
+  },
+  errorText: {
+    color: '#FF5252',
+    fontSize: 11,
+    marginTop: 4,
   },
   btnPrimary: {
     backgroundColor: '#FFCC00',

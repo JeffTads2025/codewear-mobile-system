@@ -1,7 +1,14 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { AuthRequest, UserRole } from '../types';
+import { QueryTypes } from 'sequelize';
+import { AuthRequest } from '../types';
 import User from '../models/UserModel';
+import sequelize from '../config/database';
+
+interface AuthorizationRow {
+  roleName: string;
+  permissionName: string | null;
+}
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -23,21 +30,33 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     const decoded = jwt.verify(token, jwtSecret) as {
       id: number;
       name: string;
-      role: 'admin' | 'client'
     };
 
     const currentUser = await User.findByPk(decoded.id, {
-      attributes: ['id', 'name', 'role', 'isActive']
+      attributes: ['id', 'name', 'isActive']
     });
 
     if (!currentUser || currentUser.isActive === false) {
       return res.status(401).json({ message: 'Conta cancelada ou indisponível' });
     }
 
+    const authorizationRows = await sequelize.query<AuthorizationRow>(
+      `SELECT r.name AS roleName, p.name AS permissionName
+       FROM user_roles ur
+       INNER JOIN roles r ON r.id = ur.role_id
+       LEFT JOIN role_permissions rp ON rp.role_id = r.id
+       LEFT JOIN permissions p ON p.id = rp.permission_id
+       WHERE ur.user_id = ?`,
+      { replacements: [currentUser.id], type: QueryTypes.SELECT }
+    );
+
     req.user = {
       id: currentUser.id,
       name: currentUser.name,
-      role: currentUser.role
+      permissions: authorizationRows
+        .map((row) => row.permissionName)
+        .filter((permission): permission is string => Boolean(permission)),
+      isAdmin: authorizationRows.some((row) => row.roleName.toLowerCase() === 'admin'),
     };
 
     next();
@@ -45,16 +64,4 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     console.log("ERRO JWT:", error);
     return res.status(401).json({ message: "Sessão expirada ou inválida" });
   }
-};
-
-export const authorizeRole = (...allowedRoles: UserRole[]) => (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  if (!req.user || !allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({ message: 'Acesso sem permissão para esta função.' });
-  }
-
-  next();
 };

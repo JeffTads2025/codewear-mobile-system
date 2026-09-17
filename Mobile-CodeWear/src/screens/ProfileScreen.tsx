@@ -17,6 +17,30 @@ interface ProfileData {
 
 type EditableProfileField = 'name' | 'email' | 'cpf' | 'phone' | 'address';
 
+function formatCpf(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 10) {
+    return digits
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2');
+  }
+  return digits
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2');
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 const profileFieldLabels: Record<EditableProfileField, string> = {
   name: 'Nome',
   email: 'E-mail',
@@ -30,6 +54,7 @@ export function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const navigation = useNavigation();
   const { signOut } = useAuth();
 
@@ -39,20 +64,33 @@ export function ProfileScreen() {
 
   const updateField = (field: EditableProfileField, value: string) => setProfile((current) => ({ ...current, [field]: value }));
   const chooseAvatar = async () => {
-    const [cameraPermission, mediaLibraryPermission] = await Promise.all([
-      ImagePicker.requestCameraPermissionsAsync(),
-      ImagePicker.requestMediaLibraryPermissionsAsync(),
-    ]);
-    if (!cameraPermission.granted || !mediaLibraryPermission.granted) {
-      Toast.show({ type: 'error', text1: 'Permissões necessárias', text2: 'Permita o acesso à câmera e à galeria para alterar a foto.' });
-      return;
-    }
     const choice = await new Promise<'camera' | 'gallery' | null>((resolve) => Alert.alert('Foto do perfil', 'Escolha uma origem', [
       { text: 'Câmera', onPress: () => resolve('camera') },
       { text: 'Galeria', onPress: () => resolve('gallery') },
       { text: 'Cancelar', style: 'cancel', onPress: () => resolve(null) },
     ]));
     if (!choice) return;
+
+    const permission = choice === 'camera'
+      ? await ImagePicker.getCameraPermissionsAsync()
+      : await ImagePicker.getMediaLibraryPermissionsAsync();
+    const permissionResult = permission.granted
+      ? permission
+      : await (choice === 'camera'
+        ? ImagePicker.requestCameraPermissionsAsync()
+        : ImagePicker.requestMediaLibraryPermissionsAsync());
+
+    if (!permissionResult.granted) {
+      Toast.show({
+        type: 'error',
+        text1: 'Permissão necessária',
+        text2: choice === 'camera'
+          ? 'Permita o acesso à câmera para tirar uma foto.'
+          : 'Permita o acesso às fotos para escolher uma imagem.',
+      });
+      return;
+    }
+
     const result = choice === 'camera'
       ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
@@ -61,16 +99,22 @@ export function ProfileScreen() {
       setUploading(true);
       const asset = result.assets[0];
       const formData = new FormData();
-      const mimeType = asset.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
+      const mimeType = asset.mimeType ?? 'image/jpeg';
       const avatarFile = { uri: asset.uri, name: asset.fileName ?? 'avatar.jpg', type: mimeType };
       formData.append('avatar', avatarFile as unknown as Blob);
-      const { data } = await api.post<{ avatarUrl: string }>('users/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const { data } = await api.post<{ avatarUrl: string }>('users/avatar', formData);
       setProfile((current) => ({ ...current, avatarUrl: data.avatarUrl }));
       Toast.show({ type: 'success', text1: 'Foto atualizada' });
     } catch (error: unknown) { const requestError = error as { response?: { data?: { message?: string } } }; Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível enviar a foto.' }); }
     finally { setUploading(false); }
   };
   const save = async () => {
+    if (!isValidEmail(profile.email)) {
+      setEmailError('Informe um e-mail válido.');
+      Toast.show({ type: 'error', text1: 'E-mail inválido', text2: 'Confira o formato do e-mail.' });
+      return;
+    }
+    setEmailError('');
     try {
       setLoading(true);
       await api.put('users/profile', { name: profile.name, phone: profile.phone, address: profile.address, cpf: profile.cpf });
@@ -123,7 +167,15 @@ export function ProfileScreen() {
     </TouchableOpacity>
     {(['name', 'email', 'cpf', 'phone', 'address'] as const).map((field) => <View key={field}>
       <Text style={styles.label}>{profileFieldLabels[field]}</Text>
-      <TextInput style={styles.input} value={profile[field] || ''} onChangeText={(value) => updateField(field, value)} editable={field !== 'email'} multiline={field === 'address'} />
+      <TextInput
+        style={[styles.input, field === 'email' && emailError ? styles.inputError : undefined]}
+        value={profile[field] || ''}
+        onChangeText={(value) => updateField(field, field === 'cpf' ? formatCpf(value) : field === 'phone' ? formatPhone(value) : value)}
+        editable={field !== 'email'}
+        keyboardType={field === 'cpf' ? 'number-pad' : field === 'phone' ? 'phone-pad' : field === 'email' ? 'email-address' : 'default'}
+        multiline={field === 'address'}
+      />
+      {field === 'email' && emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
     </View>)}
     <TouchableOpacity style={styles.button} onPress={save} disabled={loading}><Text style={styles.buttonText}>{loading ? 'Salvando...' : 'Salvar alterações'}</Text></TouchableOpacity>
     <TouchableOpacity style={styles.deleteButton} onPress={deleteAccount} disabled={deleting || loading || uploading}>
@@ -132,4 +184,4 @@ export function ProfileScreen() {
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ container: { flexGrow: 1, backgroundColor: '#0d0d0d', padding: 20 }, back: { color: '#ffcc00', marginBottom: 18 }, title: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }, avatarButton: { alignItems: 'center', marginBottom: 10 }, avatar: { width: 96, height: 96, borderRadius: 48 }, avatarFallback: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffcc00', alignItems: 'center', justifyContent: 'center' }, avatarLetter: { color: '#000', fontSize: 32, fontWeight: 'bold' }, avatarAction: { color: '#ffcc00', marginTop: 8 }, photoActions: { flexDirection: 'row', justifyContent: 'center', gap: 24, marginBottom: 8 }, label: { color: '#aaa', marginTop: 12, marginBottom: 5 }, input: { color: '#fff', backgroundColor: '#171717', borderColor: '#333', borderWidth: 1, borderRadius: 6, padding: 12 }, button: { backgroundColor: '#ffcc00', padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 22 }, buttonText: { color: '#000', fontWeight: 'bold' }, deleteButton: { borderColor: '#8f3030', borderWidth: 1, padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 28, marginBottom: 24 }, deleteButtonText: { color: '#e57373', fontWeight: 'bold' } });
+const styles = StyleSheet.create({ container: { flexGrow: 1, backgroundColor: '#0d0d0d', padding: 20 }, back: { color: '#ffcc00', marginBottom: 18 }, title: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }, avatarButton: { alignItems: 'center', marginBottom: 10 }, avatar: { width: 96, height: 96, borderRadius: 48 }, avatarFallback: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffcc00', alignItems: 'center', justifyContent: 'center' }, avatarLetter: { color: '#000', fontSize: 32, fontWeight: 'bold' }, avatarAction: { color: '#ffcc00', marginTop: 8 }, label: { color: '#aaa', marginTop: 12, marginBottom: 5 }, input: { color: '#fff', backgroundColor: '#171717', borderColor: '#333', borderWidth: 1, borderRadius: 6, padding: 12 }, inputError: { borderColor: '#FF5252' }, errorText: { color: '#FF5252', fontSize: 11, marginTop: 4 }, button: { backgroundColor: '#ffcc00', padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 22 }, buttonText: { color: '#000', fontWeight: 'bold' }, deleteButton: { borderColor: '#8f3030', borderWidth: 1, padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 28, marginBottom: 24 }, deleteButtonText: { color: '#e57373', fontWeight: 'bold' } });

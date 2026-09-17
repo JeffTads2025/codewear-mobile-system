@@ -3,9 +3,8 @@ import OrderItem from './OrderItemModel';
 import Order from './OrderModel';
 import Product from './ProductModel';
 import User from './UserModel';
-import ProductSize from './ProductSizeModel'; // 👈 Adicionado
-import Promotion from './PromotionModel';     // 👈 Adicionado
-import Color from './ColorModel';
+import ProductSize from './ProductSizeModel';
+import Promotion from './PromotionModel';
 
 // Relacionamentos existentes
 Cart.belongsTo(Product, { foreignKey: 'productId' });
@@ -19,5 +18,3 @@ ProductSize.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 
 Product.hasMany(Promotion, { foreignKey: 'productId', as: 'promotions' });
 Promotion.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
-Product.hasMany(Color, { foreignKey: 'productId', as: 'colors' });
-Color.belongsTo(Product, { foreignKey: 'productId', as: 'product' });

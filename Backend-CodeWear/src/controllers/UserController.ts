@@ -91,6 +91,14 @@ function buildUserListWhereClause(search: string): WhereOptions {
     };
 }
 
+function getDuplicateFieldMessage(error: unknown): string | null {
+    const databaseError = error as { name?: string; fields?: Record<string, unknown> };
+    if (databaseError.name !== 'SequelizeUniqueConstraintError') return null;
+    if (databaseError.fields?.cpf !== undefined) return 'Este CPF já está cadastrado em nossa base de dados.';
+    if (databaseError.fields?.email !== undefined) return 'Este e-mail já está cadastrado em nossa base de dados.';
+    return 'Já existe um usuário com estes dados.';
+}
+
 /**
  * CADASTRO DE USUÁRIO
  */
@@ -109,8 +117,18 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         if (!validatePhone(phone)) return res.status(400).json({ message: "Telefone inválido." });
         if (!validatePasswordLevel(password)) return res.status(400).json({ message: "Senha muito fraca." });
 
-        const userExists = await User.findOne({ where: { email } });
-        if (userExists) return res.status(400).json({ message: "Este e-mail já está em uso." });
+        const [cpfExists, emailExists] = await Promise.all([
+            User.findOne({ where: { cpf } }),
+            User.findOne({ where: { email } }),
+        ]);
+
+        if (cpfExists) {
+            return res.status(400).json({ message: "Este CPF já está cadastrado em nossa base de dados." });
+        }
+
+        if (emailExists) {
+            return res.status(400).json({ message: "Este e-mail já está cadastrado em nossa base de dados." });
+        }
 
         const newUser = await User.create({
             name,
@@ -122,10 +140,35 @@ export const createUser = async (req: AuthRequest, res: Response) => {
             role: 'client'
         });
 
-        return res.status(201).json({ message: "Usuário criado com sucesso!", id: newUser.id });
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            return res.status(500).json({ message: 'JWT_SECRET não está configurado no servidor.' });
+        }
+
+        const token = jwt.sign(
+            { id: newUser.id, name: newUser.name, role: newUser.role },
+            jwtSecret,
+            { expiresIn: '1d' }
+        );
+
+        return res.status(201).json({
+            message: "Usuário criado com sucesso!",
+            token,
+            user: {
+                id: newUser.id,
+                name: newUser.name,
+                email: newUser.email,
+                role: newUser.role,
+                phone: newUser.phone,
+                address: newUser.address,
+                avatarUrl: newUser.avatarUrl,
+            },
+        });
 
     } catch (error) {
         console.error("ERRO NO CADASTRO:", error);
+        const duplicateMessage = getDuplicateFieldMessage(error);
+        if (duplicateMessage) return res.status(409).json({ message: duplicateMessage });
         return res.status(500).json({ message: "Erro interno ao criar usuário." });
     }
 };
@@ -222,7 +265,14 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         const updateData: UserUpdatePayload = { name, phone, address };
 
         if (cpf) {
-            updateData.cpf = cpf.replace(/\D/g, ''); // Limpa o CPF
+            const normalizedCpf = cpf.replace(/\D/g, '');
+            if (!validateCPF(normalizedCpf)) return res.status(400).json({ message: 'CPF inválido.' });
+
+            const cpfExists = await User.findOne({
+                where: { cpf: normalizedCpf, id: { [Op.ne]: userId } },
+            });
+            if (cpfExists) return res.status(409).json({ message: 'Este CPF já está cadastrado em nossa base de dados.' });
+            updateData.cpf = normalizedCpf;
         }
 
         if (password) {
@@ -238,6 +288,8 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         await user.update(updateData);
         return res.status(200).json({ message: "Perfil atualizado com sucesso!" });
     } catch (error) {
+        const duplicateMessage = getDuplicateFieldMessage(error);
+        if (duplicateMessage) return res.status(409).json({ message: duplicateMessage });
         return res.status(500).json({ message: "Erro ao atualizar o perfil." });
     }
 };

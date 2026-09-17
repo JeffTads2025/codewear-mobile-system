@@ -12,7 +12,6 @@ import './models/AuditLogModel';
 import './models/OrderModel';
 import './models/OrderItemModel';
 import './models/CartModel';
-import './models/ColorModel';
 import './models/associations';
 import router from './routes/Routes';
 
@@ -46,7 +45,7 @@ async function ensureProductVisibilityColumn(): Promise<void> {
     }
 }
 
- async function ensureUserStatusColumn(): Promise<void> {
+async function ensureUserStatusColumn(): Promise<void> {
     const queryInterface = sequelize.getQueryInterface();
     const columns = await queryInterface.describeTable('users');
 

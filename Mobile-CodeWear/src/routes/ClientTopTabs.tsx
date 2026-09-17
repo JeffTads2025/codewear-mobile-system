@@ -43,18 +43,20 @@ export function ClientTopTabs() {
             }}
         >
             <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: ({ color }) => <Feather name="home" color={color} size={20} /> }} />
-            <Tab.Screen
-                name="Orders"
-                component={OrdersScreen}
-                options={{ tabBarIcon: ({ color }) => <Feather name="shopping-bag" color={color} size={20} /> }}
-                listeners={{ tabPress: (event) => { if (!requireLogin()) event.preventDefault(); } }}
-            />
+
             <Tab.Screen
                 name="Cart"
                 component={CartScreen}
                 options={{ tabBarIcon: ({ color }) => <Feather name="shopping-cart" color={color} size={20} /> }}
                 listeners={{ tabPress: (event) => { if (!requireLogin()) event.preventDefault(); } }}
             />
+            <Tab.Screen
+                name="Orders"
+                component={OrdersScreen}
+                options={{ tabBarIcon: ({ color }) => <Feather name="shopping-bag" color={color} size={20} /> }}
+                listeners={{ tabPress: (event) => { if (!requireLogin()) event.preventDefault(); } }}
+            />
+
         </Tab.Navigator>
     );
 }

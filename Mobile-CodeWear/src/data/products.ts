@@ -20,7 +20,6 @@ export interface Product {
     isActive: boolean;
     productId?: number | null;
   }[];
-  colors?: { id: number; productId: number; name: string }[];
 }
 
 export const PRODUCTS: Product[] = [

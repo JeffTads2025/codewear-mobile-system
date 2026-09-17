@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CouponValidationResponse } from '../types';
 
 
-export const apiBaseUrl = 'http://192.168.1.9:3000';
+export const apiBaseUrl = 'http://192.168.1.7:3000';
 
 export const getApiAssetUrl = (assetPath?: string | null): string | undefined => {
   if (!assetPath) return undefined;
@@ -17,7 +17,6 @@ export const api = axios.create({
   baseURL: apiBaseUrl,
   timeout: 15000,
   headers: {
-    'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
