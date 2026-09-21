@@ -11,6 +11,7 @@ import ProductSize from '../models/ProductSizeModel';
 import sequelize from '../config/database';
 import { AuthRequest } from '../types';
 import { getActiveClientWhereClause } from '../utils/accountCancellation';
+import { getApplicableDiscount } from '../utils/promotions';
 
 interface CheckoutOrderItem {
     productId: number;
@@ -56,7 +57,7 @@ export const checkout = async (req: AuthRequest, res: Response) => {
     const t = await sequelize.transaction();
     try {
         const userId = req.user!.id;
-        const { paymentMethod, address, couponCode } = req.body;
+        const { paymentMethod, address } = req.body;
 
         const cartItems = await Cart.findAll({ where: { userId } });
         if (cartItems.length === 0) throw new Error("Carrinho vazio");
@@ -67,31 +68,28 @@ export const checkout = async (req: AuthRequest, res: Response) => {
 
         let totalValue = 0;
         const itemsToOrder: CheckoutOrderItem[] = [];
+        const storePromotion = await Promotion.findOne({ where: { productId: null, code: null }, transaction: t });
 
         for (const item of cartItems) {
-            const product = await Product.findByPk(item.productId, { transaction: t });
+            const product = await Product.findByPk(item.productId, {
+                transaction: t,
+                include: [{ model: Promotion, as: 'promotions', where: { code: null }, required: false }]
+            });
             if (!product) throw new Error(`Produto ${item.productId} não encontrado`);
             if (product.stock < item.quantity) throw new Error(`Estoque insuficiente: ${product.name}`);
 
-            totalValue += item.quantity * product.price;
+            const discount = getApplicableDiscount(
+                (product.get('promotions') as Promotion[] || []),
+                storePromotion
+            );
+            const price = Number(product.price) * (1 - discount / 100);
+            totalValue += item.quantity * price;
             itemsToOrder.push({
                 productId: item.productId,
                 quantity: item.quantity,
-                price: product.price,
+                price,
                 size: item.size
             });
-        }
-
-        let discountPercentage = 0;
-        if (couponCode) {
-            const promotion = await Promotion.findOne({
-                where: { code: String(couponCode).trim().toUpperCase(), isActive: true }
-            });
-            if (!promotion || (promotion.validUntil && new Date(promotion.validUntil) < new Date())) {
-                throw new Error('Cupom inválido ou expirado');
-            }
-            discountPercentage = Number(promotion.discountPercentage);
-            totalValue = totalValue * (1 - discountPercentage / 100);
         }
 
         const order = await Order.create({

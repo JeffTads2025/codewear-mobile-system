@@ -1,17 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, ActivityIndicator, Image } from 'react-native';
 import { api } from '../services/api';
 import Toast from 'react-native-toast-message';
 import { sortSizes } from '../utils/sizes';
 import { Product } from '../data/products';
+import { useFocusEffect } from '@react-navigation/native';
 
 type StockSize = { id?: number; size: string; stock: number | string };
-type AdminProduct = Omit<Product, 'id' | 'name' | 'price' | 'stock' | 'sizes'> & {
+type ProductPromotion = { id?: number; productId?: number | null; discountPercentage: number | string; validFrom?: string; validUntil?: string; isActive: boolean };
+type AdminProduct = Omit<Product, 'id' | 'name' | 'price' | 'stock' | 'sizes' | 'promotions'> & {
   id: number;
   name: string;
   price: number | string;
   stock: number | string;
   sizes?: StockSize[];
+  promotions?: ProductPromotion[];
 };
 
 export function AdminDashboardScreen() {
@@ -19,21 +22,39 @@ export function AdminDashboardScreen() {
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [promotionCode, setPromotionCode] = useState('');
-  const [promotionDiscount, setPromotionDiscount] = useState('');
+  const [promotionDiscount, setPromotionDiscount] = useState('0');
+  const [promotionValidFrom, setPromotionValidFrom] = useState('');
   const [promotionValidUntil, setPromotionValidUntil] = useState('');
+  const [storePromotionDiscount, setStorePromotionDiscount] = useState('0');
+  const [storePromotionValidFrom, setStorePromotionValidFrom] = useState('');
+  const [storePromotionValidUntil, setStorePromotionValidUntil] = useState('');
+  const [savingStorePromotion, setSavingStorePromotion] = useState(false);
   const [sizeStocks, setSizeStocks] = useState({ P: '', M: '', G: '', GG: '' });
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [savingProductId, setSavingProductId] = useState<number | null>(null);
   const [hidingProductId, setHidingProductId] = useState<number | null>(null);
 
-  useEffect(() => {
-    api.get<{ products: AdminProduct[] } | AdminProduct[]>('products?limit=100')
-      .then(({ data }) => setProducts(Array.isArray(data) ? data : data.products))
-      .catch((error) => console.error('Erro ao carregar estoque:', error))
-      .finally(() => setLoadingProducts(false));
+  const loadProducts = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ products: AdminProduct[] } | AdminProduct[]>('products?limit=100');
+      const productsFromApi = Array.isArray(data) ? data : data.products;
+      setProducts(productsFromApi.filter((product) => product.isVisible !== false));
+      const storeResponse = await api.get<{ promotion?: ProductPromotion | null }>('promotions/store');
+      const storePromotion = storeResponse.data.promotion;
+      setStorePromotionDiscount(String(storePromotion?.discountPercentage ?? 0));
+      setStorePromotionValidFrom(storePromotion?.validFrom ? new Date(storePromotion.validFrom).toLocaleDateString('pt-BR') : '');
+      setStorePromotionValidUntil(storePromotion?.validUntil ? new Date(storePromotion.validUntil).toLocaleDateString('pt-BR') : '');
+    } catch (error) {
+      console.error('Erro ao carregar estoque:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    void loadProducts();
+  }, [loadProducts]));
 
   const formatDateBRtoISO = (value: string) => {
     const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -42,10 +63,37 @@ export function AdminDashboardScreen() {
     return `${year}-${month}-${day}`;
   };
 
-  const handleValidUntilChange = (value: string) => {
+  const formatDateForInput = (value?: string) => {
+    if (!value) return '';
+    if (!value.includes('T') && !/^\d{4}-\d{2}-\d{2}/.test(value)) return value;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('pt-BR');
+  };
+
+  const handleDateChange = (value: string, setter: (date: string) => void) => {
     const digits = value.replace(/\D/g, '').slice(0, 8);
     const parts = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean);
-    setPromotionValidUntil(parts.join('/'));
+    setter(parts.join('/'));
+  };
+
+  const getPromotion = (product: AdminProduct): ProductPromotion | undefined =>
+    product.promotions?.find((promotion) => promotion.productId === product.id);
+
+  const updateProductPromotion = (productId: number, changes: Partial<ProductPromotion>) => {
+    setProducts((current) => current.map((item) => {
+      if (item.id !== productId) return item;
+      const currentPromotion = getPromotion(item);
+      const nextPromotion = {
+        id: currentPromotion?.id,
+        productId,
+        discountPercentage: currentPromotion?.discountPercentage ?? 0,
+        validFrom: currentPromotion?.validFrom,
+        validUntil: currentPromotion?.validUntil,
+        isActive: true,
+        ...changes
+      };
+      return { ...item, promotions: [nextPromotion] };
+    }));
   };
 
   const getStockSizes = (product: AdminProduct): StockSize[] => product.sizes?.length
@@ -68,6 +116,12 @@ export function AdminDashboardScreen() {
           size: size.size,
           stock: Math.max(0, Number(size.stock) || 0),
         })),
+        promotions: (product.promotions || []).filter((promotion) => promotion.productId === product.id).map((promotion) => ({
+          discountPercentage: Math.max(0, Math.min(100, Number(promotion.discountPercentage) || 0)),
+          validFrom: formatDateBRtoISO(promotion.validFrom || ''),
+          validUntil: formatDateBRtoISO(promotion.validUntil || ''),
+          isActive: true,
+        })),
       });
       setProducts((current) => current.map((item) => item.id === product.id ? response.data.product : item));
       Toast.show({ type: 'success', text1: 'Sucesso', text2: 'Estoque atualizado.' });
@@ -76,6 +130,24 @@ export function AdminDashboardScreen() {
       Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível atualizar o estoque.' });
     } finally {
       setSavingProductId(null);
+    }
+  };
+
+  const saveStorePromotion = async () => {
+    setSavingStorePromotion(true);
+    try {
+      await api.put('promotions/store', {
+        discountPercentage: Math.max(0, Math.min(100, Number(storePromotionDiscount.replace(',', '.')) || 0)),
+        validFrom: formatDateBRtoISO(storePromotionValidFrom),
+        validUntil: formatDateBRtoISO(storePromotionValidUntil),
+        isActive: true,
+      });
+      Toast.show({ type: 'success', text1: 'Sucesso', text2: 'Promoção geral atualizada.' });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível salvar a promoção geral.' });
+    } finally {
+      setSavingStorePromotion(false);
     }
   };
 
@@ -116,15 +188,15 @@ export function AdminDashboardScreen() {
         stock: Object.values(sizeStocks).reduce((total, value) => total + Math.max(0, Number(value) || 0), 0),
         image_url: imageUrl || undefined,
         sizes: sortSizes(Object.entries(sizeStocks).map(([size, value]) => ({ size, stock: Number(value) || 0 }))),
-        promotions: promotionCode ? [{
-          code: promotionCode.trim().toUpperCase(),
+        promotions: Number(promotionDiscount.replace(',', '.')) > 0 ? [{
           discountPercentage: Number(promotionDiscount.replace(',', '.')),
+          validFrom: formatDateBRtoISO(promotionValidFrom),
           validUntil: formatDateBRtoISO(promotionValidUntil),
           isActive: true,
         }] : [],
       });
       Toast.show({ type: 'success', text1: 'Sucesso', text2: `Produto "${name}" cadastrado!` });
-      setName(''); setPrice(''); setStock(''); setImageUrl(''); setPromotionCode(''); setPromotionDiscount(''); setPromotionValidUntil(''); setSizeStocks({ P: '', M: '', G: '', GG: '' });
+      setName(''); setPrice(''); setStock(''); setImageUrl(''); setPromotionDiscount('0'); setPromotionValidFrom(''); setPromotionValidUntil(''); setSizeStocks({ P: '', M: '', G: '', GG: '' });
     } catch (error: unknown) {
       const requestError = error as { response?: { data?: { message?: string } } };
       Toast.show({ type: 'error', text1: 'Erro', text2: requestError.response?.data?.message ?? 'Não foi possível cadastrar o produto.' });
@@ -134,6 +206,25 @@ export function AdminDashboardScreen() {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.headerTitle}>Painel de Gestão</Text>
+
+      <View style={styles.cardBox}>
+        <Text style={styles.yellowTitle}>Promoção Geral da Loja</Text>
+        <Text style={styles.label}>Percentual de Desconto (%)</Text>
+        <TextInput style={styles.input} keyboardType="numeric" value={storePromotionDiscount} onChangeText={setStorePromotionDiscount} placeholder="0" placeholderTextColor="#555" />
+        <View style={styles.row}>
+          <View style={styles.flex1}>
+            <Text style={styles.label}>Data de Início</Text>
+            <TextInput style={styles.input} value={storePromotionValidFrom} onChangeText={(value) => handleDateChange(value, setStorePromotionValidFrom)} placeholder="DD/MM/AAAA" placeholderTextColor="#555" keyboardType="numeric" maxLength={10} />
+          </View>
+          <View style={styles.flex1}>
+            <Text style={styles.label}>Data de Término</Text>
+            <TextInput style={styles.input} value={storePromotionValidUntil} onChangeText={(value) => handleDateChange(value, setStorePromotionValidUntil)} placeholder="DD/MM/AAAA" placeholderTextColor="#555" keyboardType="numeric" maxLength={10} />
+          </View>
+        </View>
+        <TouchableOpacity style={styles.submitButton} onPress={saveStorePromotion} disabled={savingStorePromotion}>
+          <Text style={styles.submitText}>{savingStorePromotion ? 'Salvando...' : 'Salvar Promoção Geral'}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Formulário Novo Produto */}
       <View style={styles.cardBox}>
@@ -158,16 +249,18 @@ export function AdminDashboardScreen() {
         <Text style={styles.label}>URL da Imagem</Text>
         <TextInput style={styles.input} value={imageUrl} onChangeText={setImageUrl} placeholder="https://..." placeholderTextColor="#555" />
 
-        <Text style={styles.label}>Código de desconto (opcional)</Text>
-        <TextInput style={styles.input} value={promotionCode} onChangeText={setPromotionCode} placeholder="DEV10" placeholderTextColor="#555" autoCapitalize="characters" />
         <View style={styles.row}>
           <View style={styles.flex1}>
             <Text style={styles.label}>Desconto (%)</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={promotionDiscount} onChangeText={setPromotionDiscount} placeholder="10" placeholderTextColor="#555" />
           </View>
           <View style={styles.flex1}>
-            <Text style={styles.label}>Validade (DD/MM/AAAA)</Text>
-            <TextInput style={styles.input} value={promotionValidUntil} onChangeText={handleValidUntilChange} placeholder="31/12/2026" placeholderTextColor="#555" keyboardType="numeric" maxLength={10} />
+            <Text style={styles.label}>Data de Início</Text>
+            <TextInput style={styles.input} value={promotionValidFrom} onChangeText={(value) => handleDateChange(value, setPromotionValidFrom)} placeholder="DD/MM/AAAA" placeholderTextColor="#555" keyboardType="numeric" maxLength={10} />
+          </View>
+          <View style={styles.flex1}>
+            <Text style={styles.label}>Data de Término</Text>
+            <TextInput style={styles.input} value={promotionValidUntil} onChangeText={(value) => handleDateChange(value, setPromotionValidUntil)} placeholder="DD/MM/AAAA" placeholderTextColor="#555" keyboardType="numeric" maxLength={10} />
           </View>
         </View>
 
@@ -193,6 +286,18 @@ export function AdminDashboardScreen() {
             <TextInput style={styles.input} value={String(product.description || '')} onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id ? { ...item, description: value } : item))} multiline />
             <Text style={styles.label}>Preço</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={String(product.price || 0)} onChangeText={(value) => setProducts((current) => current.map((item) => item.id === product.id ? { ...item, price: value } : item))} />
+            <Text style={styles.label}>Desconto (%)</Text>
+            <TextInput style={styles.input} keyboardType="numeric" value={String(getPromotion(product)?.discountPercentage ?? 0)} onChangeText={(value) => updateProductPromotion(product.id, { discountPercentage: value })} />
+            <View style={styles.row}>
+              <View style={styles.flex1}>
+                <Text style={styles.label}>Data de Início</Text>
+                <TextInput style={styles.input} value={formatDateForInput(getPromotion(product)?.validFrom)} onChangeText={(value) => updateProductPromotion(product.id, { validFrom: value })} placeholder="DD/MM/AAAA" placeholderTextColor="#555" keyboardType="numeric" maxLength={10} />
+              </View>
+              <View style={styles.flex1}>
+                <Text style={styles.label}>Data de Término</Text>
+                <TextInput style={styles.input} value={formatDateForInput(getPromotion(product)?.validUntil)} onChangeText={(value) => updateProductPromotion(product.id, { validUntil: value })} placeholder="DD/MM/AAAA" placeholderTextColor="#555" keyboardType="numeric" maxLength={10} />
+              </View>
+            </View>
             {stockSizes.map((size) => (
               <View style={styles.sizeRow} key={size.id || size.size}>
                 <Text style={styles.sizeName}>Tamanho {size.size}</Text>

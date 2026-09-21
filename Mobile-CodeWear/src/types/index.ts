@@ -16,8 +16,9 @@ export interface ProductSize {
 
 export interface Promotion {
   id: number;
-  code: string;
+  code?: string | null;
   discountPercentage: number;
+  validFrom?: string;
   validUntil?: string;
   isActive: boolean;
   productId?: number | null;
@@ -40,16 +41,6 @@ export interface CartItem {
   quantity: number;
   size?: string; // 👈 Tamanho escolhido pelo cliente (P, M, G, GG)
   product: Product;
-}
-
-export interface CouponValidationResponse {
-  message: string;
-  coupon: {
-    id: number;
-    code: string;
-    discountPercentage: number;
-    productId: number | null;
-  };
 }
 
 export interface Order {

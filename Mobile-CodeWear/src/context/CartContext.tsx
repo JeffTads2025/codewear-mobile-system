@@ -3,6 +3,21 @@ import { Product } from '../data/products';
 import { useAuth } from './AuthContext';
 import { api } from '../services/api';
 
+function getActivePromotion(product: Product) {
+  const now = new Date();
+  return product.promotions?.find((promotion) => {
+    const starts = !promotion.validFrom || new Date(promotion.validFrom) <= now;
+    const ends = !promotion.validUntil || new Date(promotion.validUntil) >= now;
+    return promotion.isActive && starts && ends && Number(promotion.discountPercentage) > 0;
+  });
+}
+
+function getProductPrice(product: Product): number {
+  const price = Number(product.price ?? product.preco ?? 0);
+  const promotion = getActivePromotion(product);
+  return promotion ? price * (1 - Number(promotion.discountPercentage) / 100) : price;
+}
+
 export interface CartItem {
   id?: number;
   product: Product;
@@ -24,6 +39,14 @@ interface CartProviderProps {
   children: ReactNode;
 }
 
+interface ServerCartItem {
+  id: number;
+  quantity: number;
+  size?: string;
+  Product?: Product;
+  product?: Product;
+}
+
 const CartContext = createContext<CartContextData>({} as CartContextData);
 
 export function CartProvider({ children }: CartProviderProps) {
@@ -39,13 +62,20 @@ export function CartProvider({ children }: CartProviderProps) {
     let active = true;
     api.get('cart').then(({ data }) => {
       if (!active) return;
-      const serverItems = Array.isArray(data) ? data : data.items ?? [];
-      setCartItems(serverItems.map((item: { id: number; quantity: number; size?: string; Product?: Product; product?: Product }) => ({
-        id: item.id,
-        quantity: item.quantity,
-        size: item.size ?? '',
-        product: item.product ?? item.Product!,
-      })));
+      const serverItems: ServerCartItem[] = Array.isArray(data) ? data : data.items ?? [];
+      const mappedItems = serverItems.map((item): CartItem | null => {
+        const product = item.product ?? item.Product;
+        if (!product) return null;
+
+        return {
+          id: item.id,
+          quantity: item.quantity,
+          size: item.size ?? '',
+          product,
+        };
+      }).filter((item): item is CartItem => item !== null);
+
+      setCartItems(mappedItems);
     }).catch(() => {
       if (active) setCartItems([]);
     });
@@ -115,7 +145,7 @@ export function CartProvider({ children }: CartProviderProps) {
   };
 
   const totalCartValue = cartItems.reduce(
-    (sum, item) => sum + Number(item.product.price ?? item.product.preco ?? 0) * item.quantity,
+    (sum, item) => sum + getProductPrice(item.product) * item.quantity,
     0
   );
 

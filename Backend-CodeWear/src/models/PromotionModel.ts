@@ -3,19 +3,21 @@ import sequelize from '../config/database';
 
 interface PromotionAttributes {
   id: number;
-  code: string;
+  code?: string | null;
   discountPercentage: number;
+  validFrom?: Date;
   validUntil?: Date;
   isActive: boolean;
   productId?: number | null; // 👈 Adicionado suporte ao produto
 }
 
-interface PromotionCreationAttributes extends Optional<PromotionAttributes, 'id' | 'validUntil' | 'isActive' | 'productId'> {}
+interface PromotionCreationAttributes extends Optional<PromotionAttributes, 'id' | 'validUntil' | 'isActive' | 'productId'> { }
 
 class Promotion extends Model<PromotionAttributes, PromotionCreationAttributes> implements PromotionAttributes {
   public id!: number;
-  public code!: string;
+  public code?: string | null;
   public discountPercentage!: number;
+  public validFrom?: Date;
   public validUntil?: Date;
   public isActive!: boolean;
   public productId?: number | null; // 👈 Atributo da classe
@@ -26,8 +28,9 @@ class Promotion extends Model<PromotionAttributes, PromotionCreationAttributes> 
 
 Promotion.init({
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-  code: { type: DataTypes.STRING(50), allowNull: false, unique: true },
+  code: { type: DataTypes.STRING(50), allowNull: true, unique: true },
   discountPercentage: { type: DataTypes.DECIMAL(5, 2), allowNull: false },
+  validFrom: { type: DataTypes.DATE, allowNull: true },
   validUntil: { type: DataTypes.DATE, allowNull: true },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
   productId: { type: DataTypes.INTEGER, allowNull: true } // 👈 Mapeamento da coluna no MySQL

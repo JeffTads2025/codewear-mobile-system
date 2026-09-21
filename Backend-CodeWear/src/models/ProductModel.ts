@@ -1,5 +1,6 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
+import type Promotion from './PromotionModel';
 
 interface ProductAttributes {
   id: number;
@@ -10,6 +11,7 @@ interface ProductAttributes {
   stock: number;
   image_url?: string;
   isVisible: boolean;
+  promotions?: Promotion[];
 }
 
 interface ProductCreationAttributes extends Optional<ProductAttributes, 'id' | 'image_url' | 'isVisible'> { }
@@ -23,6 +25,7 @@ class Product extends Model<ProductAttributes, ProductCreationAttributes> implem
   public stock!: number;
   public image_url?: string;
   public isVisible!: boolean;
+  public promotions?: Promotion[];
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;

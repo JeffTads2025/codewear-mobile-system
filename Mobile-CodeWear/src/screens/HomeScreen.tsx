@@ -58,7 +58,7 @@ export function HomeScreen() {
         ? response.data
         : response.data.products;
 
-      setProducts(productsFromApi.map((product) => ({
+      setProducts(productsFromApi.filter((product) => product.isVisible !== false).map((product) => ({
         ...product,
         image: getApiAssetUrl(product.image ?? product.image_url),
         description: product.description ?? product.descricao,
@@ -146,6 +146,14 @@ export function HomeScreen() {
       return { uri: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23222%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2212%22%3EImagem não disponível%3C/text%3E%3C/svg%3E' };
     }
     return { uri: imageUrl };
+  };
+
+  const getActivePromotion = (product: Product) => {
+    const now = new Date();
+    return product.promotions?.find((promotion) => promotion.isActive
+      && (!promotion.validFrom || new Date(promotion.validFrom) <= now)
+      && (!promotion.validUntil || new Date(promotion.validUntil) >= now)
+      && Number(promotion.discountPercentage) > 0);
   };
 
   const handleLogout = async () => {
@@ -266,7 +274,10 @@ export function HomeScreen() {
               const isOutOfStock = stock === 0;
               const currentSize = selectedSizes[productId] || 'M';
               const currentQty = quantities[item.id] || (isOutOfStock ? 0 : 1);
-              const activePromotion = item.promotions?.find((promotion) => promotion.isActive);
+              const activePromotion = getActivePromotion(item);
+              const promotionalPrice = activePromotion
+                ? price * (1 - Number(activePromotion.discountPercentage) / 100)
+                : price;
 
               return (
                 <View key={item.id} style={[styles.productCard, { width: cardWidth }]}>
@@ -300,12 +311,12 @@ export function HomeScreen() {
                       <Text style={styles.inStockText}>✅ Disp: {stock} un</Text>
                     )}
 
-                    <Text style={styles.productDescription}>
-                      {item.description ||
-                        'Tamanho único - Unissex. Algodão 100% penteado super macio.'}
+                    <Text style={styles.productDescription} numberOfLines={2}>
+                      {(item.description && item.description.trim() !== '')
+                        ? item.description
+                        : 'Camiseta unissex, fabricada em algodão'}
                     </Text>
 
-                    <Text style={styles.sizeLabel}>Tamanho:</Text>
                     <View style={styles.sizeRow}>
                       {sortSizes(item.sizes || ['P', 'M', 'G', 'GG']).map((size) => {
                         const sizeName = typeof size === 'string' ? size : size.size;
@@ -344,9 +355,12 @@ export function HomeScreen() {
                     )}
 
                     <View style={styles.cardFooter}>
-                      <Text style={styles.productPrice} numberOfLines={1}>
-                        R$ {price.toFixed(2).replace('.', ',')}
-                      </Text>
+                      <View>
+                        {activePromotion && <Text style={styles.originalPrice}>R$ {price.toFixed(2).replace('.', ',')}</Text>}
+                        <Text style={styles.productPrice} numberOfLines={1}>
+                          R$ {promotionalPrice.toFixed(2).replace('.', ',')}
+                        </Text>
+                      </View>
 
                       <View style={styles.actionsContainerMobile}>
                         <View style={styles.qtyControlMobile}>
@@ -543,14 +557,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   headerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   headerAvatarFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#ffcc00',
     alignItems: 'center',
     justifyContent: 'center',
@@ -651,58 +665,53 @@ const styles = StyleSheet.create({
   },
   productCard: {
     backgroundColor: '#141414',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#222',
     overflow: 'hidden',
-    minHeight: 460,
+    minHeight: 550,
   },
   productImage: {
     width: '100%',
-    height: 120,
+    height: 210,
     backgroundColor: '#1E1E1E',
   },
   cardDetails: {
     flex: 1,
     padding: 8,
-    justifyContent: 'space-between',
   },
   productName: {
     color: '#FFF',
     fontSize: 13,
     fontWeight: 'bold',
-    marginBottom: 4,
-    minHeight: 32,
+    marginBottom: 3,
+    minHeight: 30,
   },
   inStockText: {
     color: '#00E676',
     fontSize: 10,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   outOfStockText: {
     color: '#FF5252',
     fontSize: 10,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   productDescription: {
     color: '#888',
     fontSize: 10,
+    marginVertical: 3,
     marginBottom: 6,
     lineHeight: 13,
-    minHeight: 26,
-  },
-  sizeLabel: {
-    color: '#AAA',
-    fontSize: 10,
-    marginBottom: 4,
+    minHeight: 16,
   },
   sizeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 3,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   sizeBtn: {
     backgroundColor: '#1E1E1E',
@@ -736,10 +745,12 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 6,
   },
+  originalPrice: { color: '#888', fontSize: 11, textDecorationLine: 'line-through' },
   cardFooter: {
-    marginTop: 8,
+    marginTop: 'auto',
+    paddingTop: 4,
   },
   actionsContainerMobile: {
     flexDirection: 'column',
@@ -802,9 +813,15 @@ const styles = StyleSheet.create({
     color: '#00E676',
     fontSize: 10,
     fontWeight: 'bold',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     marginBottom: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#173523',
+    borderRadius: 4,
   },
   promotionSlot: {
-    height: 16,
+    minHeight: 24,
+    marginBottom: 1,
   },
 });

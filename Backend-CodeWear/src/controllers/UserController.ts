@@ -295,6 +295,44 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 };
 
 
+// ALTERAR SENHA DO USUÁRIO LOGADO
+
+export const changePassword = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = getAuthorizedUserId(req);
+        if (!userId) return res.status(401).json({ message: "Não autorizado." });
+
+        const { currentPassword, newPassword } = req.body as {
+            currentPassword?: unknown;
+            newPassword?: unknown;
+        };
+
+        if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || !currentPassword || !newPassword) {
+            return res.status(400).json({ message: "Senha atual e nova senha são obrigatórias." });
+        }
+
+        const user = await findActiveUserById(userId);
+        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isCurrentPasswordValid) {
+            return res.status(400).json({ message: "Senha atual incorreta." });
+        }
+
+        const cleanNewPassword = newPassword.trim();
+        if (!validatePasswordLevel(cleanNewPassword)) {
+            return res.status(400).json({ message: "Senha muito fraca." });
+        }
+
+        await user.update({ password: cleanNewPassword });
+        return res.status(200).json({ message: "Senha alterada com sucesso!" });
+    } catch (error) {
+        console.error('Erro ao alterar senha:', error);
+        return res.status(500).json({ message: "Erro ao alterar a senha." });
+    }
+};
+
+
 //CANCELAR CONTA DO USUÁRIO LOGADO
 
 export const cancelMyAccount = async (req: AuthRequest, res: Response) => {

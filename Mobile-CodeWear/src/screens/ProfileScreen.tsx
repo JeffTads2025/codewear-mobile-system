@@ -3,7 +3,7 @@ import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
-import { api, getApiAssetUrl } from '../services/api';
+import { api, changePassword, getApiAssetUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 interface ProfileData {
@@ -54,6 +54,9 @@ export function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const navigation = useNavigation();
   const { signOut } = useAuth();
@@ -125,6 +128,26 @@ export function ProfileScreen() {
     } finally { setLoading(false); }
   };
 
+  const updatePassword = async () => {
+    if (!currentPassword || !newPassword) {
+      Toast.show({ type: 'error', text1: 'Campos obrigatórios', text2: 'Informe a senha atual e a nova senha.' });
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      const { data } = await changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      Toast.show({ type: 'success', text1: 'Senha alterada', text2: data.message });
+    } catch (error: unknown) {
+      const requestError = error as { response?: { data?: { message?: string } } };
+      Toast.show({ type: 'error', text1: 'Não foi possível alterar a senha', text2: requestError.response?.data?.message ?? 'Tente novamente.' });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const deleteAccount = () => {
     Alert.alert(
       'Excluir conta',
@@ -178,10 +201,34 @@ export function ProfileScreen() {
       {field === 'email' && emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
     </View>)}
     <TouchableOpacity style={styles.button} onPress={save} disabled={loading}><Text style={styles.buttonText}>{loading ? 'Salvando...' : 'Salvar alterações'}</Text></TouchableOpacity>
+    <Text style={styles.sectionTitle}>Alterar senha</Text>
+    <Text style={styles.label}>Senha atual</Text>
+    <TextInput
+      style={styles.input}
+      value={currentPassword}
+      onChangeText={setCurrentPassword}
+      placeholder="Digite sua senha atual"
+      placeholderTextColor="#777"
+      secureTextEntry
+      autoCapitalize="none"
+    />
+    <Text style={styles.label}>Nova senha</Text>
+    <TextInput
+      style={styles.input}
+      value={newPassword}
+      onChangeText={setNewPassword}
+      placeholder="Digite sua nova senha"
+      placeholderTextColor="#777"
+      secureTextEntry
+      autoCapitalize="none"
+    />
+    <TouchableOpacity style={styles.button} onPress={updatePassword} disabled={changingPassword || loading || uploading}>
+      <Text style={styles.buttonText}>{changingPassword ? 'Alterando...' : 'Alterar senha'}</Text>
+    </TouchableOpacity>
     <TouchableOpacity style={styles.deleteButton} onPress={deleteAccount} disabled={deleting || loading || uploading}>
       <Text style={styles.deleteButtonText}>{deleting ? 'Excluindo conta...' : 'Excluir minha conta'}</Text>
     </TouchableOpacity>
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ container: { flexGrow: 1, backgroundColor: '#0d0d0d', padding: 20 }, back: { color: '#ffcc00', marginBottom: 18 }, title: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }, avatarButton: { alignItems: 'center', marginBottom: 10 }, avatar: { width: 96, height: 96, borderRadius: 48 }, avatarFallback: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffcc00', alignItems: 'center', justifyContent: 'center' }, avatarLetter: { color: '#000', fontSize: 32, fontWeight: 'bold' }, avatarAction: { color: '#ffcc00', marginTop: 8 }, label: { color: '#aaa', marginTop: 12, marginBottom: 5 }, input: { color: '#fff', backgroundColor: '#171717', borderColor: '#333', borderWidth: 1, borderRadius: 6, padding: 12 }, inputError: { borderColor: '#FF5252' }, errorText: { color: '#FF5252', fontSize: 11, marginTop: 4 }, button: { backgroundColor: '#ffcc00', padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 22 }, buttonText: { color: '#000', fontWeight: 'bold' }, deleteButton: { borderColor: '#8f3030', borderWidth: 1, padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 28, marginBottom: 24 }, deleteButtonText: { color: '#e57373', fontWeight: 'bold' } });
+const styles = StyleSheet.create({ container: { flexGrow: 1, backgroundColor: '#0d0d0d', padding: 20 }, back: { color: '#ffcc00', marginBottom: 18 }, title: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }, avatarButton: { alignItems: 'center', marginBottom: 10 }, avatar: { width: 96, height: 96, borderRadius: 48 }, avatarFallback: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#ffcc00', alignItems: 'center', justifyContent: 'center' }, avatarLetter: { color: '#000', fontSize: 32, fontWeight: 'bold' }, avatarAction: { color: '#ffcc00', marginTop: 8 }, sectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 30 }, label: { color: '#aaa', marginTop: 12, marginBottom: 5 }, input: { color: '#fff', backgroundColor: '#171717', borderColor: '#333', borderWidth: 1, borderRadius: 6, padding: 12 }, inputError: { borderColor: '#FF5252' }, errorText: { color: '#FF5252', fontSize: 11, marginTop: 4 }, button: { backgroundColor: '#ffcc00', padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 22 }, buttonText: { color: '#000', fontWeight: 'bold' }, deleteButton: { borderColor: '#8f3030', borderWidth: 1, padding: 14, alignItems: 'center', borderRadius: 6, marginTop: 28, marginBottom: 24 }, deleteButtonText: { color: '#e57373', fontWeight: 'bold' } });

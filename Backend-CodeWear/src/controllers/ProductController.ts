@@ -5,6 +5,7 @@ import ProductSize from '../models/ProductSizeModel';
 import Promotion from '../models/PromotionModel';
 import AuditLog from '../models/AuditLogModel';
 import { AuthRequest } from '../types';
+import { isPromotionActive } from '../utils/promotions';
 
 interface SizePayload {
     size: string;
@@ -12,8 +13,15 @@ interface SizePayload {
 }
 
 interface PromotionPayload {
-    code: string;
     discountPercentage: number;
+    validFrom?: string;
+    validUntil?: string;
+    isActive?: boolean;
+}
+
+interface StorePromotionPayload {
+    discountPercentage: number;
+    validFrom?: string;
     validUntil?: string;
     isActive?: boolean;
 }
@@ -122,6 +130,16 @@ export const listProducts = async (req: AuthRequest, res: Response) => {
             distinct: true
         });
 
+        const storePromotion = await Promotion.findOne({ where: { productId: null, code: null } });
+        if (storePromotion && isPromotionActive(storePromotion)) {
+            rows.forEach((product) => {
+                product.setDataValue('promotions', [
+                    ...(product.get('promotions') as Promotion[] || []),
+                    storePromotion
+                ]);
+            });
+        }
+
         return res.status(200).json({ products: rows, totalPages: Math.ceil(count / limit), total: count });
     } catch (error) {
         return res.status(500).json({ message: "Erro ao listar produtos" });
@@ -161,8 +179,9 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
         if (promotions && promotions.length > 0) {
             const promoRecords = promotions.map(p => ({
                 productId: product.id,
-                code: p.code,
+                code: null,
                 discountPercentage: p.discountPercentage,
+                validFrom: p.validFrom ? new Date(p.validFrom) : undefined,
                 validUntil: p.validUntil ? new Date(p.validUntil) : undefined,
                 isActive: p.isActive ?? true
             }));
@@ -174,7 +193,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
         const createdProduct = await Product.findByPk(product.id, {
             include: [
                 { model: ProductSize, as: 'sizes' },
-                { model: Promotion, as: 'promotions' }
+                { model: Promotion, as: 'promotions', where: { code: null }, required: false }
             ]
         });
 
@@ -189,7 +208,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 export const updateProduct = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, price, stock, description, image_url, sizes } = req.body as ProductPayload;
+        const { name, price, stock, description, image_url, sizes, promotions } = req.body as ProductPayload;
 
         const product = await Product.findByPk(id);
         if (!product) {
@@ -215,6 +234,20 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
                     defaults: { productId: product.id, size: sizeData.size, stock: sizeData.stock }
                 });
                 await size.update({ stock: sizeData.stock });
+            }
+        }
+
+        if (promotions) {
+            await Promotion.destroy({ where: { productId: product.id } });
+            if (promotions.length > 0) {
+                await Promotion.bulkCreate(promotions.map((promotion) => ({
+                    productId: product.id,
+                    code: null,
+                    discountPercentage: Math.max(0, Math.min(100, Number(promotion.discountPercentage) || 0)),
+                    validFrom: promotion.validFrom ? new Date(promotion.validFrom) : undefined,
+                    validUntil: promotion.validUntil ? new Date(promotion.validUntil) : undefined,
+                    isActive: promotion.isActive ?? true
+                })));
             }
         }
 
@@ -259,5 +292,41 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
 
         const message = error instanceof Error ? error.message : "Erro ao deletar produto";
         return res.status(500).json({ message });
+    }
+};
+
+export const updateStorePromotion = async (req: AuthRequest, res: Response) => {
+    try {
+        const payload = req.body as StorePromotionPayload;
+        const discountPercentage = Math.max(0, Math.min(100, Number(payload.discountPercentage) || 0));
+        const promotion = await Promotion.findOne({ where: { productId: null, code: null } });
+
+        if (discountPercentage === 0) {
+            if (promotion) await promotion.destroy();
+            return res.status(200).json({ message: 'Promoção geral removida' });
+        }
+
+        const values = {
+            code: null,
+            productId: null,
+            discountPercentage,
+            validFrom: payload.validFrom ? new Date(payload.validFrom) : undefined,
+            validUntil: payload.validUntil ? new Date(payload.validUntil) : undefined,
+            isActive: payload.isActive ?? true
+        };
+        const savedPromotion = promotion ? await promotion.update(values) : await Promotion.create(values);
+        return res.status(200).json({ promotion: savedPromotion });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Erro ao salvar promoção geral';
+        return res.status(500).json({ message });
+    }
+};
+
+export const getStorePromotion = async (_req: AuthRequest, res: Response) => {
+    try {
+        const promotion = await Promotion.findOne({ where: { productId: null, code: null } });
+        return res.status(200).json({ promotion });
+    } catch (error) {
+        return res.status(500).json({ message: 'Erro ao carregar promoção geral' });
     }
 };

@@ -1,9 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CouponValidationResponse } from '../types';
 
 
-export const apiBaseUrl = 'http://192.168.1.7:3000';
+export const apiBaseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 export const getApiAssetUrl = (assetPath?: string | null): string | undefined => {
   if (!assetPath) return undefined;
@@ -39,7 +38,5 @@ api.interceptors.request.use(
 export const saveAuthToken = (token: string) => AsyncStorage.setItem('codewear_token', token);
 export const clearAuthToken = () => AsyncStorage.removeItem('codewear_token');
 
-export const validateCoupon = async (code: string): Promise<CouponValidationResponse> => {
-  const response = await api.post<CouponValidationResponse>('promotions/validate', { code });
-  return response.data;
-};
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  api.patch<{ message: string }>('users/change-password', { currentPassword, newPassword });

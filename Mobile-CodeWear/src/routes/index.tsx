@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Alert } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { NavigatorScreenParams } from '@react-navigation/native';
+import { NavigatorScreenParams, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { HomeScreen } from '../screens/HomeScreen';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -21,12 +23,27 @@ export type RootStackParamList = {
   Register: undefined;
   ClientApp: NavigatorScreenParams<ClientTabParamList> | undefined;
   ProductDetail: { product: Product };
-  AdminApp: undefined; 
+  AdminApp: undefined;
   Profile: undefined;
   Contact: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+function AdminRoute() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { isAuthenticated, user } = useAuth();
+  const isAdmin = isAuthenticated && user?.role === 'admin';
+
+  useEffect(() => {
+    if (isAdmin) return;
+
+    Alert.alert('Acesso negado', 'A área administrativa é exclusiva para administradores.');
+    navigation.replace('ClientApp');
+  }, [isAdmin, navigation]);
+
+  return isAdmin ? <AdminTopTabs /> : null;
+}
 
 export function Routes() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -46,7 +63,7 @@ export function Routes() {
       {!isAuthenticated && <Stack.Screen name="Register" component={RegisterScreen} />}
       <Stack.Screen name="ClientApp" component={ClientTopTabs} />
       {isAuthenticated && <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />}
-      <Stack.Screen name="AdminApp" component={AdminTopTabs} />
+      <Stack.Screen name="AdminApp" component={AdminRoute} />
       {isAuthenticated && <Stack.Screen name="Profile" component={ProfileScreen} />}
       {isAuthenticated && <Stack.Screen name="Contact" component={ContactScreen} />}
     </Stack.Navigator>

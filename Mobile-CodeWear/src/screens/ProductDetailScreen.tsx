@@ -30,7 +30,9 @@ export function ProductDetailScreen() {
   const imageUrl = product.image_url ?? product.image ?? product.imagemUrl ?? 'https://via.placeholder.com/300';
   const productPrice = Number(product.price ?? product.preco ?? 0);
   const productStock = product.stock ?? product.estoque ?? 0;
-  const productDescription = product.description ?? product.descricao ?? 'Sem descrição cadastrada.';
+  const productDescription = product.description && product.description.trim() !== ''
+    ? product.description
+    : 'Camiseta unissex, fabricada em algodão';
 
   // Tratamento dos tamanhos
   const rawSizes = product.sizes;
