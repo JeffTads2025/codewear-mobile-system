@@ -1,0 +1,42 @@
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
+export const apiBaseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
+export const getApiAssetUrl = (assetPath?: string | null): string | undefined => {
+  if (!assetPath) return undefined;
+  if (/^https?:\/\//i.test(assetPath)) {
+    return assetPath.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, apiBaseUrl);
+  }
+  return `${apiBaseUrl.replace(/\/$/, '')}/${assetPath.replace(/^\//, '')}`;
+};
+
+export const api = axios.create({
+  baseURL: apiBaseUrl,
+  timeout: 15000,
+  headers: {
+    'Accept': 'application/json',
+  },
+});
+
+api.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem('codewear_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.warn('Erro ao carregar token do AsyncStorage:', error);
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+export const saveAuthToken = (token: string) => AsyncStorage.setItem('codewear_token', token);
+export const clearAuthToken = () => AsyncStorage.removeItem('codewear_token');
+
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  api.patch<{ message: string }>('users/change-password', { currentPassword, newPassword });

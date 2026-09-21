@@ -29,7 +29,7 @@ describe('Testes de Auditoria (Logs)', () => {
     await expect(
       AuditLog.create({
         adminName: 'Admin'
-      } as any)
+      } as unknown as Parameters<typeof AuditLog.create>[0])
     ).rejects.toMatchObject({ name: 'SequelizeValidationError' });
   });
 });

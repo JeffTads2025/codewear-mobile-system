@@ -6,19 +6,23 @@ import Order from '../models/OrderModel';
 import OrderItem from '../models/OrderItemModel';
 import User from '../models/UserModel';
 import AuditLog from '../models/AuditLogModel';
+import Promotion from '../models/PromotionModel';
+import ProductSize from '../models/ProductSizeModel';
 import sequelize from '../config/database';
 import { AuthRequest } from '../types';
 import { getActiveClientWhereClause } from '../utils/accountCancellation';
+import { getApplicableDiscount } from '../utils/promotions';
 
 interface CheckoutOrderItem {
     productId: number;
     quantity: number;
     price: number;
+    size?: string;
 }
 
 function canManageOrder(order: Order, req: AuthRequest): boolean {
     const isOwner = order.userId === req.user!.id;
-    const isAdmin = req.user!.role === 'admin';
+    const isAdmin = req.user!.isAdmin;
 
     return isOwner || isAdmin;
 }
@@ -64,17 +68,27 @@ export const checkout = async (req: AuthRequest, res: Response) => {
 
         let totalValue = 0;
         const itemsToOrder: CheckoutOrderItem[] = [];
+        const storePromotion = await Promotion.findOne({ where: { productId: null, code: null }, transaction: t });
 
         for (const item of cartItems) {
-            const product = await Product.findByPk(item.productId, { transaction: t });
+            const product = await Product.findByPk(item.productId, {
+                transaction: t,
+                include: [{ model: Promotion, as: 'promotions', where: { code: null }, required: false }]
+            });
             if (!product) throw new Error(`Produto ${item.productId} não encontrado`);
             if (product.stock < item.quantity) throw new Error(`Estoque insuficiente: ${product.name}`);
 
-            totalValue += item.quantity * product.price;
+            const discount = getApplicableDiscount(
+                (product.get('promotions') as Promotion[] || []),
+                storePromotion
+            );
+            const price = Number(product.price) * (1 - discount / 100);
+            totalValue += item.quantity * price;
             itemsToOrder.push({
                 productId: item.productId,
                 quantity: item.quantity,
-                price: product.price
+                price,
+                size: item.size
             });
         }
 
@@ -91,8 +105,19 @@ export const checkout = async (req: AuthRequest, res: Response) => {
                 orderId: order.id,
                 productId: item.productId,
                 quantity: item.quantity,
-                priceAtPurchase: item.price
+                priceAtPurchase: item.price,
+                size: item.size || null
             }, { transaction: t });
+
+            if (item.size) {
+                const size = await ProductSize.findOne({
+                    where: { productId: item.productId, size: item.size },
+                    transaction: t,
+                    lock: t.LOCK.UPDATE
+                });
+                if (!size || size.stock < item.quantity) throw new Error(`Estoque indisponível para tamanho ${item.size}`);
+                await size.decrement('stock', { by: item.quantity, transaction: t });
+            }
 
             await Product.decrement('stock', {
                 by: item.quantity,
@@ -180,7 +205,7 @@ export const listAllOrdersAdmin = async (req: AuthRequest, res: Response) => {
 // 4. ADMIN: DASHBOARD 
 export const getAdminDashboard = async (req: AuthRequest, res: Response) => {
     try {
-        const { month, year } = req.query;
+        const { day, month, year } = req.query;
 
         // TOTAL
         const totalRevenue = await Order.sum('totalValue') || 0;
@@ -189,6 +214,11 @@ export const getAdminDashboard = async (req: AuthRequest, res: Response) => {
 
         // Cálculo específico do mês 
         let monthlyRevenue = 0;
+        let dailyRevenue = 0;
+        let yearlyRevenue = 0;
+        if (day && month && year) {
+            dailyRevenue = await Order.sum('totalValue', { where: { createdAt: { [Op.between]: [new Date(`${year}-${month}-${day} 00:00:00`), new Date(`${year}-${month}-${day} 23:59:59`)] } } }) || 0;
+        }
         if (month && year) {
             const startDate = new Date(Number(year), Number(month) - 1, 1, 0, 0, 0);
             const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59);
@@ -199,11 +229,16 @@ export const getAdminDashboard = async (req: AuthRequest, res: Response) => {
                 }
             }) || 0;
         }
+        if (year) {
+            yearlyRevenue = await Order.sum('totalValue', { where: { createdAt: { [Op.between]: [new Date(Number(year), 0, 1), new Date(Number(year), 11, 31, 23, 59, 59)] } } }) || 0;
+        }
 
         // Retorna tudo 
         return res.status(200).json({
             totalRevenue,
-            monthlyRevenue, 
+            monthlyRevenue,
+            dailyRevenue,
+            yearlyRevenue,
             totalOrders,
             totalUsers
         });
@@ -285,7 +320,7 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
         }
 
         const isOwner = order.userId === req.user!.id;
-        const isAdmin = req.user!.role === 'admin';
+        const isAdmin = req.user!.isAdmin;
 
         if (!isOwner && !isAdmin) {
             return res.status(403).json({ message: "Sem permissão para atualizar este pedido" });

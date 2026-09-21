@@ -1,11 +1,10 @@
-import { isCancelledEmail, CANCELLED_EMAIL_DOMAIN } from '../../utils/accountCancellation';
+import { buildCancelledAccountData, CANCELLED_EMAIL_DOMAIN } from '../../utils/accountCancellation';
 
-describe('Função isCancelledEmail', () => {
-  it('deve retornar true para email cancelado', () => {
-    expect(isCancelledEmail('user' + CANCELLED_EMAIL_DOMAIN)).toBe(true);
-  });
+describe('buildCancelledAccountData', () => {
+  it('deve gerar dados arquivados para a conta cancelada', () => {
+    const cancelledData = buildCancelledAccountData({ id: 42 } as never);
 
-  it('deve retornar false para email normal', () => {
-    expect(isCancelledEmail('user@email.com')).toBe(false);
+    expect(cancelledData.email).toContain(CANCELLED_EMAIL_DOMAIN);
+    expect(cancelledData.address).toBe('Conta cancelada');
   });
 });

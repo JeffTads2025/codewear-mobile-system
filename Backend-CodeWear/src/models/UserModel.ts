@@ -9,11 +9,13 @@ interface UserAttributes {
   password?: string;
   cpf: string;
   role: 'admin' | 'client';
+  isActive: boolean;
   phone: string;
   address: string;
+  avatarUrl?: string;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id'> { }
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'isActive'> { }
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
   public id!: number;
@@ -22,8 +24,10 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public password!: string;
   public cpf!: string;
   public role!: 'admin' | 'client';
+  public isActive!: boolean;
   public phone!: string;
   public address!: string;
+  public avatarUrl?: string;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -39,9 +43,9 @@ User.init({
     validate: { isEmail: true }
   },
   password: { type: DataTypes.STRING, allowNull: false },
-  cpf: { 
-    type: DataTypes.STRING, 
-    allowNull: false, 
+  cpf: {
+    type: DataTypes.STRING,
+    allowNull: false,
     unique: true,
     // Getter: Formata o CPF ao sair do banco para o Front-end
     get() {
@@ -58,8 +62,14 @@ User.init({
     allowNull: false,
     defaultValue: 'client'
   },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
+  },
   phone: { type: DataTypes.STRING, allowNull: false },
   address: { type: DataTypes.TEXT, allowNull: false }
+  , avatarUrl: { type: DataTypes.STRING, allowNull: true }
 }, {
   sequelize,
   tableName: 'users',

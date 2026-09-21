@@ -8,11 +8,9 @@ import Order from '../models/OrderModel';
 import OrderItem from '../models/OrderItemModel';
 import {
     buildCancelledAccountData,
-    CANCELLED_EMAIL_DOMAIN,
     getActiveClientWhereClause,
-    isCancelledEmail,
 } from '../utils/accountCancellation';
-import { validateEmail, validateCPF, validatePasswordLevel } from '../utils/validators';
+import { validateEmail, validateCPF, validatePasswordLevel, validatePhone } from '../utils/validators';
 import { AuthRequest } from '../types';
 
 interface UserUpdatePayload {
@@ -22,8 +20,6 @@ interface UserUpdatePayload {
     address?: string;
     cpf?: string;
 }
-
-type ActiveClientWhereClause = ReturnType<typeof getActiveClientWhereClause>;
 
 interface CreateUserPayload {
     name?: string;
@@ -67,7 +63,7 @@ function normalizeCreateUserPayload(payload: CreateUserPayload): NormalizedCreat
 async function findActiveUserById(userId: number): Promise<User | null> {
     const user = await User.findByPk(userId);
 
-    if (!user || isCancelledEmail(user.email)) {
+    if (!user || user.isActive === false) {
         return null;
     }
 
@@ -78,9 +74,7 @@ function buildUserListWhereClause(search: string): WhereOptions {
     if (!search) {
         return {
             role: 'client',
-            email: {
-                [Op.notLike]: `%${CANCELLED_EMAIL_DOMAIN}`,
-            },
+            isActive: true,
         };
     }
 
@@ -88,15 +82,21 @@ function buildUserListWhereClause(search: string): WhereOptions {
 
     return {
         role: 'client',
-        email: {
-            [Op.notLike]: `%${CANCELLED_EMAIL_DOMAIN}`,
-        },
+        isActive: true,
         [Op.or]: [
             where(fn('lower', col('name')), { [Op.like]: `%${normalizedSearch}%` }),
             where(fn('lower', col('email')), { [Op.like]: `%${normalizedSearch}%` }),
             where(fn('lower', col('cpf')), { [Op.like]: `%${normalizedSearch}%` })
         ]
     };
+}
+
+function getDuplicateFieldMessage(error: unknown): string | null {
+    const databaseError = error as { name?: string; fields?: Record<string, unknown> };
+    if (databaseError.name !== 'SequelizeUniqueConstraintError') return null;
+    if (databaseError.fields?.cpf !== undefined) return 'Este CPF já está cadastrado em nossa base de dados.';
+    if (databaseError.fields?.email !== undefined) return 'Este e-mail já está cadastrado em nossa base de dados.';
+    return 'Já existe um usuário com estes dados.';
 }
 
 /**
@@ -114,10 +114,21 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
         if (!validateEmail(email)) return res.status(400).json({ message: "Formato de e-mail inválido." });
         if (!validateCPF(cpf)) return res.status(400).json({ message: "CPF inválido." });
+        if (!validatePhone(phone)) return res.status(400).json({ message: "Telefone inválido." });
         if (!validatePasswordLevel(password)) return res.status(400).json({ message: "Senha muito fraca." });
 
-        const userExists = await User.findOne({ where: { email } });
-        if (userExists) return res.status(400).json({ message: "Este e-mail já está em uso." });
+        const [cpfExists, emailExists] = await Promise.all([
+            User.findOne({ where: { cpf } }),
+            User.findOne({ where: { email } }),
+        ]);
+
+        if (cpfExists) {
+            return res.status(400).json({ message: "Este CPF já está cadastrado em nossa base de dados." });
+        }
+
+        if (emailExists) {
+            return res.status(400).json({ message: "Este e-mail já está cadastrado em nossa base de dados." });
+        }
 
         const newUser = await User.create({
             name,
@@ -129,10 +140,35 @@ export const createUser = async (req: AuthRequest, res: Response) => {
             role: 'client'
         });
 
-        return res.status(201).json({ message: "Usuário criado com sucesso!", id: newUser.id });
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            return res.status(500).json({ message: 'JWT_SECRET não está configurado no servidor.' });
+        }
+
+        const token = jwt.sign(
+            { id: newUser.id, name: newUser.name, role: newUser.role },
+            jwtSecret,
+            { expiresIn: '1d' }
+        );
+
+        return res.status(201).json({
+            message: "Usuário criado com sucesso!",
+            token,
+            user: {
+                id: newUser.id,
+                name: newUser.name,
+                email: newUser.email,
+                role: newUser.role,
+                phone: newUser.phone,
+                address: newUser.address,
+                avatarUrl: newUser.avatarUrl,
+            },
+        });
 
     } catch (error) {
         console.error("ERRO NO CADASTRO:", error);
+        const duplicateMessage = getDuplicateFieldMessage(error);
+        if (duplicateMessage) return res.status(409).json({ message: duplicateMessage });
         return res.status(500).json({ message: "Erro interno ao criar usuário." });
     }
 };
@@ -142,14 +178,18 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
 export const loginUser = async (req: AuthRequest, res: Response) => {
     try {
-        const { email, password } = req.body;
+        const { email, password } = req.body as { email?: unknown; password?: unknown };
+        if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
+            return res.status(400).json({ message: "E-mail e senha são obrigatórios." });
+        }
+
         const cleanEmail = email.toLowerCase().trim();
         const rawPassword = String(password || '');
         const cleanPassword = rawPassword.trim();
         const user = await User.findOne({ where: { email: cleanEmail } });
 
         if (!user) return res.status(401).json({ message: "E-mail não encontrado." });
-        if (isCancelledEmail(user.email)) return res.status(403).json({ message: "Esta conta foi cancelada." });
+        if (user.isActive === false) return res.status(403).json({ message: "Esta conta está inativa." });
 
         let isMatch = await bcrypt.compare(rawPassword, user.password);
         if (!isMatch && cleanPassword !== rawPassword) {
@@ -158,9 +198,14 @@ export const loginUser = async (req: AuthRequest, res: Response) => {
 
         if (!isMatch) return res.status(401).json({ message: "Senha incorreta." });
 
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            return res.status(500).json({ message: 'JWT_SECRET não está configurado no servidor.' });
+        }
+
         const token = jwt.sign(
             { id: user.id, name: user.name, role: user.role },
-            process.env.JWT_SECRET || 'chave_secreta_padrao',
+            jwtSecret,
             { expiresIn: '1d' }
         );
 
@@ -174,9 +219,11 @@ export const loginUser = async (req: AuthRequest, res: Response) => {
                 role: user.role,
                 phone: user.phone,
                 address: user.address
+                , avatarUrl: user.avatarUrl
             }
         });
-    } catch (error) {
+    } catch (error: unknown) {
+        console.error('Erro ao processar login:', error instanceof Error ? error.message : error);
         return res.status(500).json({ message: "Erro ao processar o login." });
     }
 };
@@ -194,7 +241,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         });
 
         if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-        if (isCancelledEmail(user.email)) return res.status(404).json({ message: "Usuário não encontrado." });
+        if (user.isActive === false) return res.status(404).json({ message: "Usuário não encontrado." });
 
         return res.status(200).json(user);
     } catch (error) {
@@ -218,7 +265,14 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         const updateData: UserUpdatePayload = { name, phone, address };
 
         if (cpf) {
-            updateData.cpf = cpf.replace(/\D/g, ''); // Limpa o CPF
+            const normalizedCpf = cpf.replace(/\D/g, '');
+            if (!validateCPF(normalizedCpf)) return res.status(400).json({ message: 'CPF inválido.' });
+
+            const cpfExists = await User.findOne({
+                where: { cpf: normalizedCpf, id: { [Op.ne]: userId } },
+            });
+            if (cpfExists) return res.status(409).json({ message: 'Este CPF já está cadastrado em nossa base de dados.' });
+            updateData.cpf = normalizedCpf;
         }
 
         if (password) {
@@ -234,7 +288,47 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         await user.update(updateData);
         return res.status(200).json({ message: "Perfil atualizado com sucesso!" });
     } catch (error) {
+        const duplicateMessage = getDuplicateFieldMessage(error);
+        if (duplicateMessage) return res.status(409).json({ message: duplicateMessage });
         return res.status(500).json({ message: "Erro ao atualizar o perfil." });
+    }
+};
+
+
+// ALTERAR SENHA DO USUÁRIO LOGADO
+
+export const changePassword = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = getAuthorizedUserId(req);
+        if (!userId) return res.status(401).json({ message: "Não autorizado." });
+
+        const { currentPassword, newPassword } = req.body as {
+            currentPassword?: unknown;
+            newPassword?: unknown;
+        };
+
+        if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || !currentPassword || !newPassword) {
+            return res.status(400).json({ message: "Senha atual e nova senha são obrigatórias." });
+        }
+
+        const user = await findActiveUserById(userId);
+        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isCurrentPasswordValid) {
+            return res.status(400).json({ message: "Senha atual incorreta." });
+        }
+
+        const cleanNewPassword = newPassword.trim();
+        if (!validatePasswordLevel(cleanNewPassword)) {
+            return res.status(400).json({ message: "Senha muito fraca." });
+        }
+
+        await user.update({ password: cleanNewPassword });
+        return res.status(200).json({ message: "Senha alterada com sucesso!" });
+    } catch (error) {
+        console.error('Erro ao alterar senha:', error);
+        return res.status(500).json({ message: "Erro ao alterar a senha." });
     }
 };
 
@@ -249,11 +343,14 @@ export const cancelMyAccount = async (req: AuthRequest, res: Response) => {
         const user = await User.findByPk(userId);
 
         if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-        if (isCancelledEmail(user.email)) {
+        if (user.isActive === false) {
             return res.status(400).json({ message: "Esta conta já foi cancelada." });
         }
 
-        await user.update(buildCancelledAccountData(user));
+        await user.update({
+            ...buildCancelledAccountData(user),
+            isActive: false,
+        });
 
         return res.status(200).json({ message: "Conta cancelada com sucesso." });
     } catch (error) {

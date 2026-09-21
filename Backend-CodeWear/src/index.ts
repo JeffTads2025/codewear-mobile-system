@@ -1,6 +1,8 @@
 import express from 'express';
+import path from 'path';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { DataTypes } from 'sequelize';
 import sequelize from './config/database';
 
 // Importação dos Modelos (Necessário para o Sequelize criar/sincronizar as tabelas)
@@ -16,24 +18,76 @@ import router from './routes/Routes';
 // Configurações Iniciais
 dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
 // --- Rotas ---
 app.use(router);
 
+async function ensureProductVisibilityColumn(): Promise<void> {
+    const queryInterface = sequelize.getQueryInterface();
+    const columns = await queryInterface.describeTable('products');
+
+    if (!columns.isVisible) {
+        await queryInterface.addColumn('products', 'isVisible', {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: true
+        });
+    }
+}
+
+async function ensureUserStatusColumn(): Promise<void> {
+    const queryInterface = sequelize.getQueryInterface();
+    const columns = await queryInterface.describeTable('users');
+
+    if (!columns.isActive) {
+        await queryInterface.addColumn('users', 'isActive', {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: true
+        });
+    }
+}
+
+async function ensurePromotionColumns(): Promise<void> {
+    const queryInterface = sequelize.getQueryInterface();
+    const columns = await queryInterface.describeTable('promotions');
+
+    if (!columns.validFrom) {
+        await queryInterface.addColumn('promotions', 'validFrom', {
+            type: DataTypes.DATE,
+            allowNull: true
+        });
+    }
+
+    if (columns.code && columns.code.allowNull === false) {
+        await queryInterface.changeColumn('promotions', 'code', {
+            type: DataTypes.STRING(50),
+            allowNull: true,
+            unique: true
+        });
+    }
+}
+
 // --- Inicialização do Banco de Dados e Servidor ---
-
-
 sequelize.sync()
+    .then(() => ensureProductVisibilityColumn())
+    .then(() => ensureUserStatusColumn())
+    .then(() => ensurePromotionColumns())
     .then(() => {
         console.log('✅ Banco CodeWear sincronizado automaticamente!');
-        app.listen(PORT, () => {
-            console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
-            console.log(`🔗 Rota de Login pronta em: http://localhost:${PORT}/login`);
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 Servidor rodando na porta ${PORT}`);
+            console.log(`🔗 Rota de Login pronta em: /login`);
         });
     })
     .catch((err) => {

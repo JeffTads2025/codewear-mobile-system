@@ -1,48 +1,63 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { QueryTypes } from 'sequelize';
 import { AuthRequest } from '../types';
 import User from '../models/UserModel';
-import { isCancelledEmail } from '../utils/accountCancellation';
+import sequelize from '../config/database';
+
+interface AuthorizationRow {
+  roleName: string;
+  permissionName: string | null;
+}
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
 
-  if (!authHeader) {
+  if (!authHeader?.startsWith('Bearer ')) {
     console.log("ALERTA: Requisição sem header de autorização.");
-    return res.status(401).json({ message: "Login necessário" });
+    return res.status(401).json({ message: "Use o cabeçalho Authorization: Bearer <token>" });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.slice('Bearer '.length).trim();
+  const jwtSecret = process.env.JWT_SECRET;
+
+  if (!token || !jwtSecret) {
+    return res.status(401).json({ message: "Sessão inválida ou servidor sem chave JWT configurada" });
+  }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'chave_secreta_padrao') as {
+    const decoded = jwt.verify(token, jwtSecret) as {
       id: number;
       name: string;
-      role: 'admin' | 'client'
     };
 
     const currentUser = await User.findByPk(decoded.id, {
-      attributes: ['id', 'name', 'role', 'email']
+      attributes: ['id', 'name', 'isActive']
     });
 
-    if (!currentUser || isCancelledEmail(currentUser.email)) {
+    if (!currentUser || currentUser.isActive === false) {
       return res.status(401).json({ message: 'Conta cancelada ou indisponível' });
     }
+
+    const authorizationRows = await sequelize.query<AuthorizationRow>(
+      `SELECT r.name AS roleName, p.name AS permissionName
+       FROM user_roles ur
+       INNER JOIN roles r ON r.id = ur.role_id
+       LEFT JOIN role_permissions rp ON rp.role_id = r.id
+       LEFT JOIN permissions p ON p.id = rp.permission_id
+       WHERE ur.user_id = ?`,
+      { replacements: [currentUser.id], type: QueryTypes.SELECT }
+    );
 
     req.user = {
       id: currentUser.id,
       name: currentUser.name,
-      role: currentUser.role
+      permissions: authorizationRows
+        .map((row) => row.permissionName)
+        .filter((permission): permission is string => Boolean(permission)),
+      isAdmin: authorizationRows.some((row) => row.roleName.toLowerCase() === 'admin'),
     };
-
-    // Proteção de rotas administrativas
-    const isAdminRoute = req.originalUrl.includes('admin') ||
-      (req.originalUrl.includes('products') && req.method !== 'GET');
-
-    if (isAdminRoute && req.user.role !== 'admin') {
-      return res.status(403).json({ message: "Acesso restrito ao administrador" });
-    }
 
     next();
   } catch (error) {
